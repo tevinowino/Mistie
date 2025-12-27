@@ -1,3 +1,4 @@
+import { BottleSpinner } from '@/src/components/games/BottleSpinner';
 import { ChoiceCard } from '@/src/components/games/ChoiceCard';
 import { FlashCard } from '@/src/components/games/FlashCard';
 import { GameSetup } from '@/src/components/games/GameSetup';
@@ -339,6 +340,12 @@ export default function GamePlay() {
     startGame,
     updateSessionConfig,
     session,
+    // Spin state for Hard Dare
+    spinResult,
+    spinComplete,
+    isSpinning,
+    isUser1,
+    initiateSpin,
   } = useGameSession({
     bondId: bondId || '',
     gameTypeSlug: slug || '',
@@ -560,12 +567,12 @@ export default function GamePlay() {
             {partnerConnected ? (
               <>
                 <Wifi color="#22C55E" size={12} />
-                <Text style={styles.syncText}>Partner connected</Text>
+                <Text style={styles.syncText}>{partnerName} connected</Text>
               </>
             ) : (
               <>
                 <WifiOff color={colors.muted} size={12} />
-                <Text style={[styles.syncText, { color: colors.muted }]}>Waiting for partner...</Text>
+                <Text style={[styles.syncText, { color: colors.muted }]}>Waiting for {partnerName}...</Text>
               </>
             )}
           </View>
@@ -580,6 +587,7 @@ export default function GamePlay() {
       <View style={styles.cardArea}>
         {slug === 'mirror' ? (
           <InputCard
+            key={currentPrompt.id}
             prompt={currentPrompt.prompt_text}
             cardNumber={currentIndex + 1}
             totalCards={effectivePrompts.length}
@@ -596,6 +604,7 @@ export default function GamePlay() {
           />
         ) : slug === 'whos-more-likely' || slug === 'is-it-okay' ? (
           <ChoiceCard
+            key={currentPrompt.id}
             prompt={slug === 'whos-more-likely' 
               ? currentPrompt.prompt_text.replace("Who's more likely to ", '').replace('?', '') 
               : currentPrompt.prompt_text}
@@ -614,8 +623,40 @@ export default function GamePlay() {
             onSelect={(choice) => submitAnswer(choice)}
             onClose={handleClose}
           />
+        ) : slug === 'hard-dare' ? (
+          <View style={{ flex: 1 }}>
+            <FlashCard
+              key={currentPrompt.id}
+              prompt={currentPrompt.prompt_text}
+              cardNumber={currentIndex + 1}
+              totalCards={effectivePrompts.length}
+              gradientColors={activeColors}
+              backgroundImage={getGameBackgroundImage(slug as string)}
+              gameTitle={gameMeta?.title}
+              onNext={spinComplete ? goToNext : undefined}
+              onPrevious={goToPrevious}
+              canGoBack={currentIndex > 0}
+              onClose={handleClose}
+              hideNavigation={!spinComplete}
+            />
+            {/* Bottle Spinner Overlay */}
+            <View style={styles.spinnerOverlay}>
+              <BottleSpinner
+                myName={myName}
+                partnerName={partnerName}
+                isUser1={isUser1}
+                spinResult={spinResult}
+                isSpinning={isSpinning}
+                spinComplete={spinComplete}
+                onSpin={initiateSpin}
+                onContinue={spinComplete ? goToNext : undefined}
+                disabled={isSpinning || !!spinResult}
+              />
+            </View>
+          </View>
         ) : (
           <FlashCard
+            key={currentPrompt.id}
             prompt={currentPrompt.prompt_text}
             cardNumber={currentIndex + 1}
             totalCards={effectivePrompts.length}
@@ -651,6 +692,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
+  },
+  spinnerOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   closeButton: {
     width: 44,

@@ -26,11 +26,12 @@ interface FlashCardProps {
   gradientColors: string[];
   backgroundImage?: any;
   gameTitle?: string;
-  onNext: () => void;
+  onNext?: () => void;
   onPrevious: () => void;
   onSkip?: () => void;
   onClose?: () => void;
   canGoBack?: boolean;
+  hideNavigation?: boolean;
 }
 
 export function FlashCard({
@@ -44,6 +45,7 @@ export function FlashCard({
   onPrevious,
   onClose,
   canGoBack = true,
+  hideNavigation = false,
 }: FlashCardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
@@ -149,12 +151,12 @@ export function FlashCard({
       }),
     ]).start(() => {
       if (direction === 'left') {
-        onNext();
+        onNext?.();
       } else {
         onPrevious();
       }
     });
-  }, [isAnimating, canGoBack, cardNumber, onNext, onPrevious, translateX, cardOpacity]);
+  }, [isAnimating, canGoBack, cardNumber, onNext, onPrevious, translateX, cardOpacity, hideNavigation]);
 
   // Pan responder
   const panResponder = useRef(
@@ -345,34 +347,37 @@ export function FlashCard({
       </View>
 
       {/* Navigation */}
-      <View style={styles.navContainer}>
-        <TouchableOpacity
-          style={[
-            styles.navButton,
-            (!canGoBack || cardNumber <= 1) && styles.navButtonDisabled,
-          ]}
-          onPress={() => handleSwipe('right')}
-          disabled={!canGoBack || cardNumber <= 1}
-        >
-          <ChevronLeft color={canGoBack && cardNumber > 1 ? colors.text : colors.muted} size={22} />
-          <Text style={[
-            styles.navButtonText,
-            (!canGoBack || cardNumber <= 1) && styles.navButtonTextDisabled,
-          ]}>Back</Text>
-        </TouchableOpacity>
+      {!hideNavigation && (
+        <View style={styles.navContainer}>
+          <TouchableOpacity
+            style={[
+              styles.navButton,
+              (!canGoBack || cardNumber <= 1) && styles.navButtonDisabled,
+            ]}
+            onPress={() => handleSwipe('right')}
+            disabled={!canGoBack || cardNumber <= 1}
+          >
+            <ChevronLeft color={canGoBack && cardNumber > 1 ? colors.text : colors.muted} size={22} />
+            <Text style={[
+              styles.navButtonText,
+              (!canGoBack || cardNumber <= 1) && styles.navButtonTextDisabled,
+            ]}>Back</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.swipeHintText}>
-          Swipe to navigate
-        </Text>
+          <Text style={styles.swipeHintText}>
+            Swipe to navigate
+          </Text>
 
-        <TouchableOpacity
-          style={styles.navButton}
-          onPress={() => handleSwipe('left')}
-        >
-          <Text style={styles.navButtonText}>Next</Text>
-          <ChevronRight color={colors.text} size={22} />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.navButton, !onNext && styles.navButtonDisabled]}
+            onPress={() => onNext && handleSwipe('left')}
+            disabled={!onNext}
+          >
+            <Text style={[styles.navButtonText, !onNext && styles.navButtonTextDisabled]}>Next</Text>
+            <ChevronRight color={onNext ? colors.text : colors.muted} size={22} />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }

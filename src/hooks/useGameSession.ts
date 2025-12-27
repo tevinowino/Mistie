@@ -29,6 +29,12 @@ interface UseGameSessionReturn {
   // Configuration
   configNeeded: boolean;
   gameType: GameType | null;
+  
+  // Spin state (for Hard Dare)
+  spinResult: 'user_1' | 'user_2' | null;
+  spinComplete: boolean;
+  isSpinning: boolean;
+  isUser1: boolean;
 
   // Actions
   updateSessionConfig: (config: { heatLevel?: number; mode?: string }) => Promise<void>;
@@ -39,6 +45,7 @@ interface UseGameSessionReturn {
   submitAnswer: (answer: string) => void;
   refreshPrompts: () => void;
   endSession: () => void;
+  initiateSpin: () => void;
 }
 
 export function useGameSession({
@@ -66,6 +73,11 @@ export function useGameSession({
   const [myAnswer, setMyAnswer] = useState<string | null>(null);
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
   const [bondData, setBondData] = useState<{ user_1_id: string; user_2_id: string } | null>(null);
+  
+  // Spin state (for Hard Dare bottle spinner)
+  const [spinResult, setSpinResult] = useState<'user_1' | 'user_2' | null>(null);
+  const [spinComplete, setSpinComplete] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
   
   // Refs
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -341,9 +353,22 @@ export function useGameSession({
           table: 'game_sessions',
           filter: `id=eq.${sessionId}`,
         },
-        (payload) => {
+        async (payload) => {
           const newData = payload.new as GameSession;
+          const oldData = payload.old as GameSession;
           
+          // Check for config changes that require prompt reload
+          if (
+            newData.heat_level !== oldData.heat_level || 
+            newData.mode !== oldData.mode
+          ) {
+            console.log('Game config changed remotely, reloading prompts...');
+            await loadPrompts(bondId, newData.game_type_id, {
+              heatLevel: newData.heat_level,
+              mode: newData.mode
+            });
+          }
+
           // Update current index (this is the key sync!)
           setCurrentIndex(newData.current_prompt_index || 0);
           setSession(newData);
@@ -360,8 +385,39 @@ export function useGameSession({
             setMyAnswer(newData.user_2_response || null);
             setPartnerAnswer(newData.user_1_response || null);
           }
+
+          // Sync spin state from partner
+          if (newData.spin_result !== oldData.spin_result) {
+            setSpinResult(newData.spin_result || null);
+            if (newData.spin_result && !oldData.spin_result) {
+              // Partner initiated spin - start our animation too
+              setIsSpinning(true);
+              setTimeout(() => {
+                setSpinComplete(true);
+                setIsSpinning(false);
+              }, 3000);
+            }
+          }
+          if (newData.spin_complete !== oldData.spin_complete) {
+            setSpinComplete(newData.spin_complete || false);
+          }
+          // Reset spin state when moving to new card
+          if (newData.current_prompt_index !== oldData.current_prompt_index) {
+            setSpinResult(newData.spin_result || null);
+            setSpinComplete(newData.spin_complete || false);
+            setIsSpinning(false);
+          }
         }
       )
+      .on('broadcast', { event: 'refresh-prompts' }, async () => {
+         console.log('Received refresh broadcast, reloading prompts...');
+         if (session) {
+           await loadPrompts(bondId, session.game_type_id, {
+             heatLevel: session.heat_level,
+             mode: session.mode
+           });
+         }
+      })
       .subscribe();
   };
 
@@ -396,6 +452,7 @@ export function useGameSession({
     const newIndex = currentIndex < prompts.length - 1 ? currentIndex + 1 : 0;
     
     // Update in database - this will trigger real-time sync
+    // Also reset spin state for the new card
     const { error } = await supabase
       .from('game_sessions')
       .update({ 
@@ -404,6 +461,9 @@ export function useGameSession({
         user_2_ready: false,
         user_1_response: null,
         user_2_response: null,
+        spin_result: null,
+        spin_initiated_by: null,
+        spin_complete: false,
       })
       .eq('id', session.id);
 
@@ -413,6 +473,10 @@ export function useGameSession({
       setPartnerReady(false);
       setMyAnswer(null);
       setPartnerAnswer(null);
+      // Reset local spin state
+      setSpinResult(null);
+      setSpinComplete(false);
+      setIsSpinning(false);
     }
   }, [session, currentIndex, prompts.length]);
 
@@ -475,9 +539,19 @@ export function useGameSession({
   }, [session, isUser1]);
 
   // Refresh prompts
+  // Refresh prompts
   const refreshPrompts = useCallback(async () => {
     if (!bondId || !gameTypeId) return;
     
+    // Broadcast to partner that we are refreshing
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'refresh-prompts',
+        payload: {}
+      });
+    }
+
     setIsGenerating(true);
     const currentHeat = session?.heat_level;
     const currentMode = session?.mode;
@@ -502,6 +576,45 @@ export function useGameSession({
     setSession(null);
   }, [session]);
 
+  // Initiate spin for Hard Dare bottle spinner
+  const initiateSpin = useCallback(async () => {
+    if (!session || !user || spinResult || isSpinning) return;
+    
+    // Set local spinning state immediately
+    setIsSpinning(true);
+    
+    // Randomly determine result
+    const result: 'user_1' | 'user_2' = Math.random() < 0.5 ? 'user_1' : 'user_2';
+    
+    // Update database - this triggers sync to partner
+    const { error } = await supabase
+      .from('game_sessions')
+      .update({
+        spin_result: result,
+        spin_initiated_by: user.id,
+        spin_complete: false, // Will be set to true after animation
+      })
+      .eq('id', session.id);
+    
+    if (!error) {
+      setSpinResult(result);
+      
+      // Mark spin as complete after animation duration
+      setTimeout(async () => {
+        setSpinComplete(true);
+        setIsSpinning(false);
+        
+        // Update DB to mark complete
+        await supabase
+          .from('game_sessions')
+          .update({ spin_complete: true })
+          .eq('id', session.id);
+      }, 3000); // Match animation duration
+    } else {
+      setIsSpinning(false);
+    }
+  }, [session, user, spinResult, isSpinning]);
+
   return {
     session,
     prompts,
@@ -516,6 +629,12 @@ export function useGameSession({
     partnerAnswer,
     configNeeded,
     gameType,
+    // Spin state
+    spinResult,
+    spinComplete,
+    isSpinning,
+    isUser1,
+    // Actions
     startGame,
     updateSessionConfig,
     goToNext,
@@ -524,5 +643,6 @@ export function useGameSession({
     submitAnswer,
     refreshPrompts,
     endSession,
+    initiateSpin,
   };
 }

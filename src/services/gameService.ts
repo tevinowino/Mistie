@@ -49,6 +49,10 @@ export interface GameSession {
   user_1_response?: string | null;
   user_2_response?: string | null;
   is_active: boolean;
+  // Bottle spinner fields
+  spin_result?: 'user_1' | 'user_2' | null;
+  spin_initiated_by?: string | null;
+  spin_complete?: boolean;
 }
 
 class GameService {

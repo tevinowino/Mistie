@@ -1,12 +1,17 @@
 import { GameCard } from '@/src/components/dashboard/GameCard';
+import { OnboardingProgressCard } from '@/src/components/dashboard/OnboardingProgressCard';
+import { RelationshipDurationCard } from '@/src/components/dashboard/RelationshipDurationCard';
 import { HarmonyRing } from '@/src/components/HarmonyRing';
 import { NugButton } from '@/src/components/NugButton';
 import { NugReceivedModal } from '@/src/components/NugReceivedModal';
 import { NugSentOverlay } from '@/src/components/NugSentOverlay';
+import { BondOnboardingModal } from '@/src/components/onboarding/BondOnboardingModal';
+import { IndividualOnboardingModal } from '@/src/components/onboarding/IndividualOnboardingModal';
 import { FloatingHeader } from '@/src/components/ui/FloatingHeader';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
 import { useTheme } from '@/src/context/ThemeContext';
+import { useOnboardingStatus } from '@/src/hooks/useOnboardingStatus';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors } from '@/src/theme/colors';
@@ -61,6 +66,26 @@ export default function Dashboard() {
   const [dewStatus, setDewStatus] = useState<'none' | 'pending' | 'waiting' | 'partner-waiting' | 'revealed'>('none');
   const [receivedNug, setReceivedNug] = useState<{ type: 'silent' | 'note'; content?: string } | null>(null);
   const [showNugModal, setShowNugModal] = useState(false);
+
+  // Onboarding Integration
+  const { isUserProfileComplete, isBondProfileComplete, bond: onboardingBond, isLoading: onboardingLoading, refreshStatus } = useOnboardingStatus();
+  const [showIndividualModal, setShowIndividualModal] = useState(false);
+  const [showBondModal, setShowBondModal] = useState(false);
+  const [hasAutoOpenedUnique, setHasAutoOpenedUnique] = useState(false);
+
+  useEffect(() => {
+    // Auto-trigger onboarding if needed (Immediate flow)
+    if (!onboardingLoading && !hasAutoOpenedUnique) {
+       if (!isUserProfileComplete) {
+         setShowIndividualModal(true);
+         setHasAutoOpenedUnique(true); // Don't spam
+       } else if (isLinked && !isBondProfileComplete) {
+         // Only if linked
+         setShowBondModal(true);
+         setHasAutoOpenedUnique(true);
+       }
+    }
+  }, [onboardingLoading, isUserProfileComplete, isUserProfileComplete, isLinked, isBondProfileComplete, hasAutoOpenedUnique]);
 
   const [showSentAnimation, setShowSentAnimation] = useState(false);
 
@@ -248,8 +273,19 @@ export default function Dashboard() {
         {/* Hero Greeting */}
         <View style={styles.heroSection}>
           <Text style={[styles.greeting, { color: colors.muted }]}>{getGreeting()},</Text>
-          <Text style={[styles.userName, { color: colors.text }]}>{userName} 💫</Text>
+          <Text style={[styles.userName, { color: colors.text }]}>{userName}</Text>
         </View>
+
+        {/* Relationship Duration (Calculated from Anniversary) */}
+        {bond?.anniversary_date && (
+           <RelationshipDurationCard date={bond.anniversary_date} />
+        )}
+
+        {/* Onboarding Progress Card */}
+        {/* <OnboardingProgressCard 
+          onOpenIndividual={() => setShowIndividualModal(true)}
+          onOpenBond={() => setShowBondModal(true)}
+        /> */}
         
         {!isLinked && !isLoading && renderLinkingCard()}
 
@@ -385,6 +421,26 @@ export default function Dashboard() {
         onDismiss={() => {
           setShowNugModal(false);
           setReceivedNug(null);
+        }}
+      />
+
+      <IndividualOnboardingModal 
+        visible={showIndividualModal} 
+        onComplete={() => {
+          setShowIndividualModal(false);
+          refreshStatus();
+          // Optional: Check if bond is next immediately?
+          // For now, let the useEffect handle it on next render or user can click the card
+          setHasAutoOpenedUnique(false); // Valid to allow next auto-open (e.g. bond)
+        }}
+      />
+
+      <BondOnboardingModal 
+        visible={showBondModal}
+        bondId={onboardingBond?.id}
+        onComplete={() => {
+          setShowBondModal(false);
+          refreshStatus();
         }}
       />
     </ScreenWrapper>

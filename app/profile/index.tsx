@@ -1,0 +1,525 @@
+import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
+import { useAuth } from '@/src/context/AuthContext';
+import { useTheme } from '@/src/context/ThemeContext';
+import { useOnboardingStatus } from '@/src/hooks/useOnboardingStatus';
+import { bondService } from '@/src/services/bondService';
+import { profileService } from '@/src/services/profileService';
+import { darkColors, lightColors } from '@/src/theme/colors';
+import { router } from 'expo-router';
+import { ArrowLeft, Check, Heart, LogOut, Moon, Save, Smartphone, Sun, User } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+type ThemeMode = 'light' | 'dark' | 'system';
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Non-Binary', 'Prefer not to say'];
+const DYNAMIC_OPTIONS = ["Crush", "Situationship", "Dating", "Engaged", "Married", "Open Relationship"];
+
+export default function ProfileScreen() {
+  const { user, signOut } = useAuth();
+  const { isDark, themeMode, setThemeMode } = useTheme();
+  const colors = isDark ? darkColors : lightColors;
+  const { bond, refreshStatus } = useOnboardingStatus();
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Personal Info
+  const [name, setName] = useState('');
+  const [gender, setGender] = useState('');
+  // DOB
+  const [dobDay, setDobDay] = useState('');
+  const [dobMonth, setDobMonth] = useState('');
+  const [dobYear, setDobYear] = useState('');
+
+  // Bond Info
+  const [dynamic, setDynamic] = useState('');
+  // Anniversary
+  const [annDay, setAnnDay] = useState('');
+  const [annMonth, setAnnMonth] = useState('');
+  const [annYear, setAnnYear] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, [user]);
+
+  const loadData = async () => {
+    if (!user) return;
+    setIsLoading(true);
+
+    try {
+      // 1. Load Profile
+      const { data: profile } = await profileService.getProfile(user.id);
+      if (profile) {
+        setName(profile.display_name || '');
+        setGender(profile.gender || '');
+        if (profile.birth_date) {
+          const [y, m, d] = profile.birth_date.split('-');
+          setDobYear(y);
+          setDobMonth(m);
+          setDobDay(d);
+        }
+      }
+
+      // 2. Load Bond (already have from hook, but refresh ensures latest)
+      // Actually use hook data if available, or fetch fresh if needed.
+      // Hook data might be stale if we just navigated here?
+      // Let's rely on the hook's refresh or fetch directly to be safe?
+      // Fetching directly is safer for an edit screen.
+      const { data: bondData } = await bondService.getUserBond(user.id);
+      if (bondData) {
+        setDynamic(bondData.dynamic || '');
+        if (bondData.anniversary_date) {
+          const [y, m, d] = bondData.anniversary_date.split('-');
+          setAnnYear(y);
+          setAnnMonth(m);
+          setAnnDay(d);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    setIsSaving(true);
+    
+    try {
+      // 1. Save Profile
+      const birthDate = (dobYear && dobMonth && dobDay) 
+        ? `${dobYear}-${dobMonth.padStart(2, '0')}-${dobDay.padStart(2, '0')}`
+        : null;
+
+      const { error: profileError } = await profileService.updateProfile(user.id, {
+        display_name: name,
+        gender: gender,
+        birth_date: birthDate || undefined,
+      });
+
+      if (profileError) throw profileError;
+
+      // 2. Save Bond (if exists)
+      if (bond && bond.id) {
+        const anniversaryDate = (annYear && annMonth && annDay)
+          ? `${annYear}-${annMonth.padStart(2, '0')}-${annDay.padStart(2, '0')}`
+          : null;
+
+        const { error: bondError } = await bondService.updateBond(bond.id, {
+          dynamic: dynamic,
+          anniversary_date: anniversaryDate,
+        });
+
+        if (bondError) throw bondError;
+      }
+
+      // Refresh global context
+      await refreshStatus();
+      
+      Alert.alert('Success', 'Profile updated successfully');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Sign Out', 
+          style: 'destructive', 
+          onPress: async () => {
+            await signOut();
+            router.replace('/(auth)/login');
+          } 
+        }
+      ]
+    );
+  };
+
+  const renderDateInput = (
+    d: string, setD: (v: string) => void,
+    m: string, setM: (v: string) => void,
+    y: string, setY: (v: string) => void
+  ) => (
+    <View style={styles.dateInputContainer}>
+      <TextInput
+        style={[styles.dateInput, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
+        placeholder="DD"
+        placeholderTextColor={colors.muted}
+        value={d}
+        onChangeText={setD}
+        keyboardType="number-pad"
+        maxLength={2}
+      />
+      <TextInput
+        style={[styles.dateInput, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
+        placeholder="MM"
+        placeholderTextColor={colors.muted}
+        value={m}
+        onChangeText={setM}
+        keyboardType="number-pad"
+        maxLength={2}
+      />
+      <TextInput
+        style={[styles.dateInput, { flex: 1.5, borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
+        placeholder="YYYY"
+        placeholderTextColor={colors.muted}
+        value={y}
+        onChangeText={setY}
+        keyboardType="number-pad"
+        maxLength={4}
+      />
+    </View>
+  );
+
+  const themeOptions: { mode: ThemeMode; label: string; icon: React.ReactNode }[] = [
+    { mode: 'light', label: 'Light', icon: <Sun color={colors.text} size={20} /> },
+    { mode: 'dark', label: 'Dark', icon: <Moon color={colors.text} size={20} /> },
+    { mode: 'system', label: 'System', icon: <Smartphone color={colors.text} size={20} /> },
+  ];
+
+  if (isLoading) {
+    return (
+      <ScreenWrapper>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      </ScreenWrapper>
+    );
+  }
+
+  return (
+    <ScreenWrapper>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Edit Profile</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+        
+        {/* PERSONAL INFO */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <User size={18} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Personal Info</Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.muted }]}>Full Name</Text>
+            <TextInput
+              style={[styles.input, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              placeholderTextColor={colors.muted}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.muted }]}>Gender</Text>
+            <View style={styles.genderOptions}>
+              {GENDER_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[
+                    styles.optionChip,
+                    gender === opt && { backgroundColor: colors.primary }
+                  ]}
+                  onPress={() => setGender(opt)}
+                >
+                  <Text style={[
+                    styles.optionText,
+                    { color: gender === opt ? 'white' : colors.text }
+                  ]}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.muted }]}>Date of Birth</Text>
+            {renderDateInput(dobDay, setDobDay, dobMonth, setDobMonth, dobYear, setDobYear)}
+          </View>
+        </View>
+
+        {/* BOND INFO */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Heart size={18} color={colors.primary} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Relationship</Text>
+          </View>
+
+          {bond ? (
+            <>
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.muted }]}>Dynamic</Text>
+                <View style={styles.genderOptions}>
+                  {DYNAMIC_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[
+                        styles.optionChip,
+                        dynamic === opt && { backgroundColor: colors.primary }
+                      ]}
+                      onPress={() => setDynamic(opt)}
+                    >
+                      <Text style={[
+                        styles.optionText,
+                        { color: dynamic === opt ? 'white' : colors.text }
+                      ]}>{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, { color: colors.muted }]}>Anniversary Date</Text>
+                {renderDateInput(annDay, setAnnDay, annMonth, setAnnMonth, annYear, setAnnYear)}
+              </View>
+            </>
+          ) : (
+             <Text style={[styles.noBondText, { color: colors.muted }]}>
+               Partner not connected yet.
+             </Text>
+          )}
+        </View>
+
+        {/* APPEARANCE */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+          <View style={[styles.themeOptions, { backgroundColor: colors.card, borderColor: 'rgba(0,0,0,0.05)', borderWidth: 1 }]}>
+            {themeOptions.map((option, index) => (
+              <TouchableOpacity
+                key={option.mode}
+                style={[
+                  styles.themeOption,
+                  index < themeOptions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                  themeMode === option.mode && { backgroundColor: isDark ? 'rgba(255, 107, 148, 0.1)' : '#FFF0F3' },
+                ]}
+                onPress={() => setThemeMode(option.mode)}
+              >
+                {option.icon}
+                <Text style={[
+                  styles.themeLabel,
+                  { color: colors.text },
+                  themeMode === option.mode && { color: colors.primary },
+                ]}>
+                  {option.label}
+                </Text>
+                {themeMode === option.mode && (
+                  <Check color={colors.primary} size={16} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* SAVE BUTTON */}
+        <TouchableOpacity 
+          style={[styles.saveButton, { backgroundColor: colors.primary }]} 
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Save size={20} color="white" />
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* LOGOUT */}
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={handleSignOut}
+        >
+          <LogOut size={20} color="#EF4444" />
+          <Text style={styles.logoutText}>Sign Out</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.versionText, { color: colors.muted }]}>
+          Version 1.0.0 (Beta)
+        </Text>
+
+      </ScrollView>
+    </ScreenWrapper>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontFamily: 'Outfit',
+    fontWeight: 'bold',
+  },
+  placeholder: {
+    width: 40,
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 60,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Outfit',
+    fontWeight: '600',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Quicksand',
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  input: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontFamily: 'Quicksand',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  dateInputContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateInput: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 0,
+    textAlign: 'center',
+    fontSize: 16,
+    fontFamily: 'Quicksand',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  genderOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  optionText: {
+    fontSize: 14,
+    fontFamily: 'Quicksand',
+    fontWeight: '600',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: 28,
+    gap: 8,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontFamily: 'Outfit',
+    fontWeight: 'bold',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+    marginBottom: 24,
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontFamily: 'Quicksand',
+    fontWeight: '600',
+  },
+  versionText: {
+    textAlign: 'center',
+    fontSize: 12,
+    fontFamily: 'Quicksand',
+    opacity: 0.5,
+  },
+  noBondText: {
+    fontFamily: 'Quicksand',
+    fontStyle: 'italic',
+  },
+  themeOptions: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  themeLabel: {
+    fontFamily: 'Quicksand',
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+});

@@ -13,6 +13,9 @@ export const bondService = {
       .from('bonds')
       .select(`
         *,
+        dynamic,
+        is_onboarding_complete,
+        anniversary_date,
         user_1_profile:profiles!bonds_user_1_id_fkey(id, display_name, avatar_url),
         user_2_profile:profiles!bonds_user_2_id_fkey(id, display_name, avatar_url)
       `)
@@ -87,6 +90,18 @@ export const bondService = {
       .single();
 
     return { data: updated, error: updateError };
+  },
+
+  // Update bond details (e.g. dynamic, onboarding status)
+  async updateBond(bondId: string, updates: any) {
+    const { data, error } = await supabase
+      .from('bonds')
+      .update(updates)
+      .eq('id', bondId)
+      .select()
+      .single();
+    
+    return { data, error };
   },
 
   // --- DAILY DEW METHODS ---
@@ -200,7 +215,7 @@ export const bondService = {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url')
+      .select('id, display_name, avatar_url, birth_date, is_onboarding_complete')
       .eq('id', partnerId)
       .single();
 

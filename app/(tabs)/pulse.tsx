@@ -6,8 +6,9 @@ import { useTheme } from '@/src/context/ThemeContext';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors } from '@/src/theme/colors';
+import { differenceInDays, differenceInMonths, differenceInYears, parseISO } from 'date-fns';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowRight, Calendar, ChevronRight, Droplets, Flame, Heart, MessageCircle, TrendingUp } from 'lucide-react-native';
+import { ArrowRight, Calendar, CalendarHeart, ChevronRight, Droplets, Flame, Heart, MessageCircle, TrendingUp } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -20,6 +21,10 @@ interface Stats {
   dewsCompleted: number;
   dewsTotal: number;
   bondDays: number;
+  anniversaryDate: string | null;
+  togetherDays: number | null;
+  togetherMonths: number | null;
+  togetherYears: number | null;
 }
 
 interface ActivityItem {
@@ -42,6 +47,10 @@ export default function Pulse() {
     dewsCompleted: 0,
     dewsTotal: 0,
     bondDays: 0,
+    anniversaryDate: null,
+    togetherDays: null,
+    togetherMonths: null,
+    togetherYears: null,
   });
   const [partnerName, setPartnerName] = useState('Partner');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -131,6 +140,23 @@ export default function Pulse() {
     // Sort by date (most recent first) and limit
     setActivities(activityItems.slice(0, 5));
 
+    // Calculate "Together For" from anniversary_date
+    let togetherYears = null;
+    let togetherMonths = null;
+    let togetherDays = null;
+    
+    if (bond.anniversary_date) {
+      const startDate = parseISO(bond.anniversary_date);
+      const now = new Date();
+      togetherYears = differenceInYears(now, startDate);
+      togetherMonths = differenceInMonths(now, startDate) % 12;
+      // Calculate remaining days
+      const tempDate = new Date(startDate);
+      tempDate.setFullYear(tempDate.getFullYear() + togetherYears);
+      tempDate.setMonth(tempDate.getMonth() + togetherMonths);
+      togetherDays = differenceInDays(now, tempDate);
+    }
+
     setStats({
       streak: bond.streak_count || 0,
       bestStreak: bond.best_streak || 0,
@@ -140,6 +166,10 @@ export default function Pulse() {
       dewsCompleted,
       dewsTotal,
       bondDays,
+      anniversaryDate: bond.anniversary_date || null,
+      togetherYears,
+      togetherMonths,
+      togetherDays,
     });
 
     setIsLoading(false);
@@ -217,7 +247,7 @@ export default function Pulse() {
 
             {/* Right Column Stack */}
             <View style={styles.gridColumn}>
-              {/* Bond Days */}
+              {/* Bond Days (App Usage) - Restored */}
               <View style={[styles.glassCard, styles.smallCard, { 
                 backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.7)', 
                 borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'white' 
@@ -248,6 +278,41 @@ export default function Pulse() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* TOGETHER FOR - Wide Card */}
+          {stats.anniversaryDate && (
+             <View style={[styles.glassCard, styles.wideCard, { 
+              backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.7)', 
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'white' 
+            }]}>
+              <View style={styles.wideCardContent}>
+                 <View style={styles.metricInfo}>
+                   <View style={styles.smallCardHeader}>
+                     <CalendarHeart color={colors.primary} size={20} />
+                     <Text style={[styles.cardLabel, { color: colors.muted, marginBottom: 0 }]}>Together For</Text>
+                   </View>
+                   <View style={{flexDirection: 'row', alignItems: 'baseline', gap: 12, marginTop: 8}}>
+                      {stats.togetherYears !== null && stats.togetherYears > 0 && (
+                        <View style={{alignItems: 'center'}}>
+                          <Text style={[styles.mediumNumber, { color: colors.text, fontSize: 24 }]}>{stats.togetherYears}</Text>
+                          <Text style={[styles.unitTextSmall, { color: colors.muted }]}>YEARS</Text>
+                        </View>
+                      )}
+                      
+                      <View style={{alignItems: 'center'}}>
+                        <Text style={[styles.mediumNumber, { color: colors.text, fontSize: 24 }]}>{stats.togetherMonths}</Text>
+                        <Text style={[styles.unitTextSmall, { color: colors.muted }]}>MONTHS</Text>
+                      </View>
+                      
+                      <View style={{alignItems: 'center'}}>
+                        <Text style={[styles.mediumNumber, { color: colors.text, fontSize: 24 }]}>{stats.togetherDays}</Text>
+                        <Text style={[styles.unitTextSmall, { color: colors.muted }]}>DAYS</Text>
+                      </View>
+                   </View>
+                 </View>
+              </View>
+            </View>
+          )}
 
           {/* Bottom Row - Completion */}
           <View style={[styles.glassCard, styles.wideCard, { 
