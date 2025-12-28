@@ -10,12 +10,13 @@ import { WalkthroughModal } from '@/src/components/onboarding/WalkthroughModal';
 import { FloatingHeader } from '@/src/components/ui/FloatingHeader';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useNetwork } from '@/src/context/NetworkContext';
 import { useTheme } from '@/src/context/ThemeContext';
 import { useOnboardingStatus } from '@/src/hooks/useOnboardingStatus';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors } from '@/src/theme/colors';
-import { getGameBackgroundImage, getGamesByCategory } from '@/src/utils/gameImages';
+import { GAMES_METADATA, getGameBackgroundImage } from '@/src/utils/gameImages';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,9 +30,10 @@ import {
   Heart,
   Link,
   Sparkles,
+  WifiOff,
   Zap,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 // Get greeting based on time
@@ -50,6 +52,8 @@ const GAME_ICONS: Record<string, React.ReactNode> = {
   'intimacy': <Heart color="white" size={24} />,
   'hard-dare': <Zap color="white" size={24} />,
 };
+
+const {isConnected} = useNetwork();
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -103,7 +107,12 @@ export default function Dashboard() {
 
   const [showSentAnimation, setShowSentAnimation] = useState(false);
 
-  const featuredGames = getGamesByCategory('intimacy');
+  // Randomize games on mount
+  const featuredGames = useMemo(() => {
+    return [...GAMES_METADATA]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -301,6 +310,16 @@ export default function Dashboard() {
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
       >
+
+                {!isConnected && (
+                    <View style={[styles.offlineBanner, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
+                        <WifiOff color={isDark ? '#FCA5A5' : '#EF4444'} size={20} />
+                        <Text style={[styles.offlineText, { color: isDark ? '#FECACA' : '#991B1B' }]}>
+                            Offline. Changes cannot be saved.
+                        </Text>
+                    </View>
+                )}
+        
         {/* Hero Greeting */}
         <View style={styles.heroSection}>
           <Text style={[styles.greeting, { color: colors.muted }]}>{getGreeting()},</Text>
@@ -311,12 +330,6 @@ export default function Dashboard() {
         {bond?.anniversary_date && (
            <RelationshipDurationCard date={bond.anniversary_date} />
         )}
-
-        {/* Onboarding Progress Card */}
-        {/* <OnboardingProgressCard 
-          onOpenIndividual={() => setShowIndividualModal(true)}
-          onOpenBond={() => setShowBondModal(true)}
-        /> */}
         
         {!isLinked && !isLoading && renderLinkingCard()}
 
@@ -414,8 +427,8 @@ export default function Dashboard() {
         {/* Featured Games */}
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Spice It Up 🔥</Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>Turn up the heat</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Suggested for You ✨</Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>Try something new today</Text>
           </View>
           <TouchableOpacity 
             style={styles.seeAllBtn}
@@ -532,6 +545,21 @@ const styles = StyleSheet.create({
   linkContent: {
     flex: 1,
   },
+  offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 24,
+      borderWidth: 1,
+      gap: 12,
+  },
+  offlineText: {
+      fontFamily: 'Quicksand',
+      fontSize: 14,
+      fontWeight: '600',
+  },
+
   linkTitle: {
     fontFamily: 'Outfit',
     fontSize: 17,

@@ -1,12 +1,14 @@
+import { BreakBondModal } from '@/src/components/profile/BreakBondModal';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useNetwork } from '@/src/context/NetworkContext'; // NEW
 import { useTheme } from '@/src/context/ThemeContext';
 import { useOnboardingStatus } from '@/src/hooks/useOnboardingStatus';
 import { bondService } from '@/src/services/bondService';
 import { profileService } from '@/src/services/profileService';
 import { darkColors, lightColors } from '@/src/theme/colors';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, Check, ChevronRight, Heart, LogOut, Moon, Save, Smartphone, Sun, User } from 'lucide-react-native';
+import { AlertTriangle, ArrowLeft, Bell, Check, ChevronRight, Heart, LogOut, Moon, Save, Smartphone, Sun, User, WifiOff } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -18,11 +20,13 @@ const DYNAMIC_OPTIONS = ["Crush", "Situationship", "Dating", "Engaged", "Married
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { isDark, themeMode, setThemeMode } = useTheme();
+  const { isConnected } = useNetwork(); // NEW
   const colors = isDark ? darkColors : lightColors;
   const { bond, refreshStatus } = useOnboardingStatus();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showBreakBondModal, setShowBreakBondModal] = useState(false);
 
   // Personal Info
   const [name, setName] = useState('');
@@ -33,6 +37,7 @@ export default function ProfileScreen() {
   const [dobYear, setDobYear] = useState('');
 
   // Bond Info
+  const [partnerName, setPartnerName] = useState('');
   const [dynamic, setDynamic] = useState('');
   // Anniversary
   const [annDay, setAnnDay] = useState('');
@@ -40,8 +45,12 @@ export default function ProfileScreen() {
   const [annYear, setAnnYear] = useState('');
 
   useEffect(() => {
-    loadData();
-  }, [user]);
+    if (user && isConnected) {
+       loadData();
+    } else {
+       setIsLoading(false);
+    }
+  }, [user, isConnected]);
 
   const loadData = async () => {
     if (!user) return;
@@ -61,11 +70,7 @@ export default function ProfileScreen() {
         }
       }
 
-      // 2. Load Bond (already have from hook, but refresh ensures latest)
-      // Actually use hook data if available, or fetch fresh if needed.
-      // Hook data might be stale if we just navigated here?
-      // Let's rely on the hook's refresh or fetch directly to be safe?
-      // Fetching directly is safer for an edit screen.
+      // 2. Load Bond
       const { data: bondData } = await bondService.getUserBond(user.id);
       if (bondData) {
         setDynamic(bondData.dynamic || '');
@@ -74,6 +79,12 @@ export default function ProfileScreen() {
           setAnnYear(y);
           setAnnMonth(m);
           setAnnDay(d);
+        }
+        
+        // Load Partner Name
+        const { data: partnerProfile } = await bondService.getPartnerProfile(bondData, user.id);
+        if (partnerProfile?.display_name) {
+          setPartnerName(partnerProfile.display_name);
         }
       }
     } catch (error) {
@@ -84,8 +95,36 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleBreakBond = async () => {
+    if (!isConnected) {
+        Alert.alert("Offline", "You cannot break a bond while offline.");
+        return;
+    }
+    if (!bond || !bond.id) return;
+    try {
+      const { error } = await bondService.breakBond(bond.id);
+      if (error) throw error;
+      
+      setShowBreakBondModal(false);
+      await refreshStatus(); // Update context
+      
+      // Navigate to dashboard where unlinked state will be shown
+      router.replace('/(tabs)' as any); 
+      
+      // Optional: Show success
+      // Alert.alert('Bond Broken', 'You have successfully disconnected.'); 
+    } catch (err) {
+      console.error('Failed to break bond:', err);
+      Alert.alert('Error', 'Failed to break bond. Please try again.');
+    }
+  };
+
   const handleSave = async () => {
     if (!user) return;
+    if (!isConnected) {
+        Alert.alert("Offline", "Please check your internet connection to save changes.");
+        return;
+    }
     setIsSaving(true);
     
     try {
@@ -151,7 +190,7 @@ export default function ProfileScreen() {
     m: string, setM: (v: string) => void,
     y: string, setY: (v: string) => void
   ) => (
-    <View style={styles.dateInputContainer}>
+    <View style={[styles.dateInputContainer, !isConnected && {opacity: 0.6}]}>
       <TextInput
         style={[styles.dateInput, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
         placeholder="DD"
@@ -160,6 +199,7 @@ export default function ProfileScreen() {
         onChangeText={setD}
         keyboardType="number-pad"
         maxLength={2}
+        editable={isConnected}
       />
       <TextInput
         style={[styles.dateInput, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
@@ -169,6 +209,7 @@ export default function ProfileScreen() {
         onChangeText={setM}
         keyboardType="number-pad"
         maxLength={2}
+        editable={isConnected}
       />
       <TextInput
         style={[styles.dateInput, { flex: 1.5, borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
@@ -178,6 +219,7 @@ export default function ProfileScreen() {
         onChangeText={setY}
         keyboardType="number-pad"
         maxLength={4}
+        editable={isConnected}
       />
     </View>
   );
@@ -214,6 +256,16 @@ export default function ProfileScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         
+        {/* Offline Warning */}
+        {!isConnected && (
+            <View style={[styles.offlineBanner, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
+                <WifiOff color={isDark ? '#FCA5A5' : '#EF4444'} size={20} />
+                <Text style={[styles.offlineText, { color: isDark ? '#FECACA' : '#991B1B' }]}>
+                    You are offline. Some features will be limited till you're back online.
+                </Text>
+            </View>
+        )}
+
         {/* PERSONAL INFO */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -221,7 +273,7 @@ export default function ProfileScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Personal Info</Text>
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, !isConnected && {opacity: 0.6}]}>
             <Text style={[styles.label, { color: colors.muted }]}>Full Name</Text>
             <TextInput
               style={[
@@ -236,10 +288,11 @@ export default function ProfileScreen() {
               onChangeText={setName}
               placeholder="Your name"
               placeholderTextColor={colors.muted}
+              editable={isConnected}
             />
           </View>
 
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, !isConnected && {opacity: 0.6}]}>
             <Text style={[styles.label, { color: colors.muted }]}>Gender</Text>
             <View style={styles.genderOptions}>
               {GENDER_OPTIONS.map((opt) => (
@@ -250,7 +303,8 @@ export default function ProfileScreen() {
                     { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                     gender === opt && { backgroundColor: colors.primary }
                   ]}
-                  onPress={() => setGender(opt)}
+                  onPress={() => isConnected && setGender(opt)}
+                  disabled={!isConnected}
                 >
                   <Text style={[
                     styles.optionText,
@@ -276,7 +330,7 @@ export default function ProfileScreen() {
 
           {bond ? (
             <>
-              <View style={styles.inputGroup}>
+              <View style={[styles.inputGroup, !isConnected && {opacity: 0.6}]}>
                 <Text style={[styles.label, { color: colors.muted }]}>Dynamic</Text>
                 <View style={styles.genderOptions}>
                   {DYNAMIC_OPTIONS.map((opt) => (
@@ -287,7 +341,8 @@ export default function ProfileScreen() {
                         { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                         dynamic === opt && { backgroundColor: colors.primary }
                       ]}
-                      onPress={() => setDynamic(opt)}
+                      onPress={() => isConnected && setDynamic(opt)}
+                      disabled={!isConnected}
                     >
                       <Text style={[
                         styles.optionText,
@@ -348,9 +403,11 @@ export default function ProfileScreen() {
           style={[styles.menuButton, { 
             backgroundColor: colors.card, 
             borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
-            borderWidth: 1 
+            borderWidth: 1,
+            opacity: isConnected ? 1 : 0.6
           }]}
-          onPress={() => router.push('/notifications' as any)}
+          onPress={() => isConnected && router.push('/notifications' as any)}
+          disabled={!isConnected}
         >
           <View style={[styles.menuIconContainer, { backgroundColor: isDark ? 'rgba(255, 107, 148, 0.1)' : '#FFF0F3' }]}>
              <Bell size={20} color={colors.primary} />
@@ -361,9 +418,9 @@ export default function ProfileScreen() {
 
         {/* SAVE BUTTON */}
         <TouchableOpacity 
-          style={[styles.saveButton, { backgroundColor: colors.primary }]} 
+          style={[styles.saveButton, { backgroundColor: colors.primary, opacity: isConnected ? 1 : 0.6 }]} 
           onPress={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !isConnected}
         >
           {isSaving ? (
             <ActivityIndicator color="white" />
@@ -374,6 +431,22 @@ export default function ProfileScreen() {
             </>
           )}
         </TouchableOpacity>
+
+      {/* DANGER ZONE */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+           <AlertTriangle size={18} color="#EF4444" />
+           <Text style={[styles.sectionTitle, { color: colors.text }]}>Danger Zone</Text>
+        </View>
+        
+        <TouchableOpacity 
+           style={[styles.dangerButton, { backgroundColor: 'rgba(239, 68, 68, 0.08)', opacity: isConnected ? 1 : 0.6 }]}
+           onPress={() => isConnected && setShowBreakBondModal(true)}
+           disabled={!isConnected}
+        >
+           <Text style={styles.dangerButtonText}>Break Bond</Text>
+        </TouchableOpacity>
+      </View>
 
         {/* LOGOUT */}
         <TouchableOpacity 
@@ -389,6 +462,13 @@ export default function ProfileScreen() {
         </Text>
 
       </ScrollView>
+
+      <BreakBondModal 
+        visible={showBreakBondModal}
+        onClose={() => setShowBreakBondModal(false)}
+        onConfirm={handleBreakBond}
+        partnerName={partnerName || 'Partner'}
+      />
     </ScreenWrapper>
   );
 }
@@ -426,6 +506,20 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 60,
+  },
+  offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 24,
+      borderWidth: 1,
+      gap: 12,
+  },
+  offlineText: {
+      fontFamily: 'Quicksand',
+      fontSize: 14,
+      fontWeight: '600',
   },
   section: {
     marginBottom: 32,
@@ -522,6 +616,21 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 16,
     fontFamily: 'Quicksand',
+    fontWeight: '600',
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  dangerButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontFamily: 'Outfit',
     fontWeight: '600',
   },
   versionText: {

@@ -251,6 +251,48 @@ export const bondService = {
     return { data, error };
   },
 
+  async breakBond(bondId: string) {
+    console.log('[BondService] Breaking bond:', bondId);
+    
+    // 1. Manual Clean up of related tables (to ensure data integrity if Cascade isn't set)
+    const tablesToDelete = [
+      'daily_dews',
+      'nugs',
+      'game_sessions',
+      'bond_game_prompts',
+      'bond_seen_prompts',
+      'relationship_anchors'
+    ];
+
+    for (const table of tablesToDelete) {
+      const { error } = await supabase.from(table).delete().eq('bond_id', bondId);
+      if (error) {
+           console.warn(`[BondService] Failed to cleanup ${table}:`, error);
+           // We continue even if one fails, hoping the database FKs might handle it or it's already gone
+      }
+    }
+
+    // 2. Unlink Intimacy Maps (if applicable)
+    const { error: mapError } = await supabase
+        .from('intimacy_maps')
+        .update({ bond_id: null })
+        .eq('bond_id', bondId);
+    if (mapError) console.warn('[BondService] Failed to unlink intimacy_maps:', mapError);
+
+    // 3. Delete the Bond
+    const { error: bondError } = await supabase
+      .from('bonds')
+      .delete()
+      .eq('id', bondId);
+
+    if (bondError) {
+      console.error('[BondService] Failed to delete bond:', bondError);
+      return { success: false, error: bondError };
+    }
+
+    return { success: true, error: null };
+  },
+
   async getPartnerProfile(bond: any, currentUserId: string) {
     if (!bond) {
       console.log('getPartnerProfile: No bond provided');

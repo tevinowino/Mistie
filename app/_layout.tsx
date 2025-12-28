@@ -4,6 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
+import { NetworkProvider } from '../src/context/NetworkContext';
 import { ThemeProvider } from '../src/context/ThemeContext';
 import './globals.css';
 
@@ -89,9 +90,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </NetworkProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

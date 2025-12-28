@@ -1,19 +1,21 @@
 import { FloatingHeader } from '@/src/components/ui/FloatingHeader';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useNetwork } from '@/src/context/NetworkContext';
 import { useTheme } from '@/src/context/ThemeContext';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors, lightColors as staticColors } from '@/src/theme/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import { Check, ChevronRight, Clock, Droplets, Send } from 'lucide-react-native';
+import { Check, ChevronRight, Clock, Droplets, Send, WifiOff } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function DailyDew() {
   const { user } = useAuth();
   const { isDark } = useTheme();
+  const { isConnected } = useNetwork();
   const colors = isDark ? darkColors : lightColors;
   const [dew, setDew] = useState<any>(null);
   const [bond, setBond] = useState<any>(null);
@@ -32,13 +34,18 @@ export default function DailyDew() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [user])
+      // Only load if connected
+      if (user && isConnected) {
+        loadData();
+      } else {
+        setIsLoading(false);
+      }
+    }, [user, isConnected])
   );
 
   // Real-time subscription
   useEffect(() => {
-    if (!bond?.id) return;
+    if (!bond?.id || !isConnected) return;
 
     const channel = supabase
       .channel(`dew-${bond.id}`)
@@ -60,7 +67,7 @@ export default function DailyDew() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [bond?.id]);
+  }, [bond?.id, isConnected]);
 
   const loadData = async () => {
     if (!user) return;
@@ -125,6 +132,7 @@ export default function DailyDew() {
   };
 
   const handleSubmit = async () => {
+    if (!isConnected) return;
     if (!answer.trim() || !dew || !bond) return;
     setIsSubmitting(true);
     
@@ -136,6 +144,27 @@ export default function DailyDew() {
       setAnswer(''); // Clear input
     }
   };
+
+  if (!isConnected) {
+    return (
+      <ScreenWrapper variant="dawn" noPadding>
+         <FloatingHeader 
+            onProfilePress={() => router.push('/profile')}
+            onNotificationPress={() => console.log('Notifications')}
+            streak={0}
+         />
+         <View style={styles.offlineContainer}>
+             <View style={[styles.offlineIconCircle, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2' }]}>
+                 <WifiOff size={48} color={isDark ? '#FCA5A5' : '#EF4444'} />
+             </View>
+             <Text style={[styles.offlineTitle, { color: colors.text }]}>Offline Mode</Text>
+             <Text style={[styles.offlineSubtitle, { color: colors.muted }]}>
+                 Connect to the internet to see today's question and share your answer.
+             </Text>
+         </View>
+       </ScreenWrapper>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -348,6 +377,34 @@ export default function DailyDew() {
 }
 
 const styles = StyleSheet.create({
+  offlineContainer: {
+     flex: 1,
+     alignItems: 'center',
+     justifyContent: 'center',
+     paddingHorizontal: 32,
+     paddingBottom: 100, // accommodate nav
+  },
+  offlineIconCircle: {
+     width: 100,
+     height: 100,
+     borderRadius: 50,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginBottom: 24,
+  },
+  offlineTitle: {
+    fontFamily: 'Outfit',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  offlineSubtitle: {
+    fontFamily: 'Quicksand',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 120,
@@ -546,4 +603,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-

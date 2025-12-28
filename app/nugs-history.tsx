@@ -1,15 +1,16 @@
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useNetwork } from '@/src/context/NetworkContext';
 import { useTheme } from '@/src/context/ThemeContext';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { colors } from '@/src/theme/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowUpRight, Heart, MessageCircle } from 'lucide-react-native';
+import { ArrowUpRight, Heart, MessageCircle, WifiOff } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface Nug {
   id: number;
@@ -23,6 +24,7 @@ interface Nug {
 export default function NugsHistory() {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { isConnected } = useNetwork();
   const isDark = theme === 'dark';
   
   const [nugs, setNugs] = useState<Nug[]>([]);
@@ -32,8 +34,12 @@ export default function NugsHistory() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [user])
+        if (isConnected) {
+            loadData();
+        } else {
+            setIsLoading(false);
+        }
+    }, [user, isConnected])
   );
 
   const loadData = async () => {
@@ -144,6 +150,16 @@ export default function NugsHistory() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {!isConnected && (
+            <View style={[styles.offlineBanner, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
+                <WifiOff color={isDark ? '#FCA5A5' : '#EF4444'} size={20} />
+                <Text style={[styles.offlineText, { color: isDark ? '#FECACA' : '#991B1B' }]}>
+                    Offline. Showing cached history if available.
+                </Text>
+            </View>
+        )}
+
         {/* Stats Glass Panel */}
         <BlurView intensity={20} tint={isDark ? 'dark' : 'light'} style={styles.statsGlass}>
           <View style={styles.statItem}>
@@ -167,7 +183,9 @@ export default function NugsHistory() {
           <View style={styles.emptyState}>
             <Heart color={colors.muted} size={48} />
             <Text style={[styles.emptyText, { color: colors.text }]}>No nugs yet</Text>
-            <Text style={[styles.emptyHint, { color: colors.muted }]}>Send your first nug from the home screen!</Text>
+            <Text style={[styles.emptyHint, { color: colors.muted }]}>
+                {isConnected ? "Send your first nug from the home screen!" : "Connect to internet to see history."}
+            </Text>
           </View>
         ) : (
           <View style={styles.list}>
@@ -184,9 +202,6 @@ export default function NugsHistory() {
     </ScreenWrapper>
   );
 }
-
-// Need to import Ionicons or just use Lucide arrow
-import { ScrollView } from 'react-native';
 
 const styles = StyleSheet.create({
   header: {
@@ -218,6 +233,20 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
+  },
+  offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      gap: 12,
+  },
+  offlineText: {
+      fontFamily: 'Quicksand',
+      fontSize: 14,
+      fontWeight: '600',
   },
   statsGlass: {
     flexDirection: 'row',

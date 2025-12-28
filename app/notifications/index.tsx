@@ -1,11 +1,12 @@
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useNetwork } from '@/src/context/NetworkContext';
 import { useTheme } from '@/src/context/ThemeContext';
 import { supabase } from '@/src/lib/supabase';
 import { darkColors, lightColors } from '@/src/theme/colors';
 import { formatDistanceToNow } from 'date-fns';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, Calendar, Droplet, Gamepad2, Heart, Info, Link as LinkIcon, MessageCircle, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Bell, Calendar, Droplet, Gamepad2, Heart, Info, Link as LinkIcon, MessageCircle, Trash2, WifiOff } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -22,6 +23,7 @@ type NotificationItem = {
 export default function NotificationsScreen() {
   const { user } = useAuth();
   const { isDark } = useTheme();
+  const { isConnected } = useNetwork();
   const colors = isDark ? darkColors : lightColors;
   
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -29,9 +31,13 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchNotifications();
-    markAllAsRead(); // Optional: or mark individual? Usually feed view marks as read.
-  }, [user]);
+    if (isConnected) {
+        fetchNotifications();
+        markAllAsRead(); 
+    } else {
+        setLoading(false);
+    }
+  }, [user, isConnected]);
 
   const fetchNotifications = async () => {
     if (!user) return;
@@ -63,7 +69,7 @@ export default function NotificationsScreen() {
   };
 
   const clearAll = async () => {
-      if (!user) return;
+      if (!user || !isConnected) return;
       setLoading(true);
       const { error } = await supabase
           .from('notifications')
@@ -131,10 +137,23 @@ export default function NotificationsScreen() {
           <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>
-        <TouchableOpacity onPress={clearAll} style={styles.clearButton}>
+        <TouchableOpacity 
+            onPress={clearAll} 
+            style={[styles.clearButton, !isConnected && { opacity: 0.5 }]}
+            disabled={!isConnected}
+        >
            <Trash2 size={20} color={colors.muted} />
         </TouchableOpacity>
       </View>
+
+      {!isConnected && (
+            <View style={[styles.offlineBanner, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEF2F2', borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5' }]}>
+                <WifiOff color={isDark ? '#FCA5A5' : '#EF4444'} size={20} />
+                <Text style={[styles.offlineText, { color: isDark ? '#FECACA' : '#991B1B' }]}>
+                    Offline. Changes cannot be saved.
+                </Text>
+            </View>
+      )}
 
       {/* List */}
       {loading && !refreshing ? (
@@ -148,7 +167,20 @@ export default function NotificationsScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotifications(); }} tintColor={colors.primary} />
+            <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={() => { 
+                    if(isConnected) {
+                        setRefreshing(true); 
+                        fetchNotifications(); 
+                    } else {
+                        // maybe show toast?
+                        setRefreshing(false);
+                    }
+                }} 
+                tintColor={colors.primary} 
+                enabled={isConnected}
+            />
           }
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -183,6 +215,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Outfit',
     fontWeight: 'bold',
+  },
+  offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 16,
+      marginHorizontal: 20,
+      borderWidth: 1,
+      gap: 12,
+  },
+  offlineText: {
+      fontFamily: 'Quicksand',
+      fontSize: 14,
+      fontWeight: '600',
   },
   listContent: {
     paddingHorizontal: 20,

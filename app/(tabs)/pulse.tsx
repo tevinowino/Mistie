@@ -7,8 +7,9 @@ import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors } from '@/src/theme/colors';
 import { differenceInDays, differenceInMonths, differenceInYears, parseISO } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowRight, Calendar, CalendarHeart, ChevronRight, Droplets, Flame, Heart, MessageCircle, TrendingUp } from 'lucide-react-native';
+import { ArrowRight, Calendar, CalendarHeart, ChevronRight, Droplets, Flame, Heart, Link, MessageCircle, TrendingUp } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -38,6 +39,8 @@ export default function Pulse() {
   const { user } = useAuth();
   const { isDark } = useTheme();
   const colors = isDark ? darkColors : lightColors;
+  
+  const [isLinked, setIsLinked] = useState<boolean>(false); // New state to track connection
   const [stats, setStats] = useState<Stats>({
     streak: 0,
     bestStreak: 0,
@@ -70,10 +73,15 @@ export default function Pulse() {
 
     // Get bond
     const { data: bond } = await bondService.getUserBond(user.id);
-    if (!bond) {
+    
+    // Check if bond exists AND is active (status='couple')
+    if (!bond || bond.status !== 'couple') {
+      setIsLinked(false);
       setIsLoading(false);
       return;
     }
+    
+    setIsLinked(true);
 
     // Get partner name
     const { data: partnerProfile } = await bondService.getPartnerProfile(bond, user.id);
@@ -199,6 +207,46 @@ export default function Pulse() {
 
   const harmony = calculateHarmony();
   const harmonyLabel = harmony >= 80 ? 'Thriving' : harmony >= 60 ? 'Growing' : harmony >= 40 ? 'Budding' : 'New';
+
+  if (!isLinked && !isLoading) {
+    return (
+      <ScreenWrapper variant="dawn" noPadding>
+        <FloatingHeader 
+          onProfilePress={() => router.push('/profile')}
+          onNotificationPress={() => console.log('Notifications')}
+          streak={0}
+        />
+        <View style={styles.emptyContainer}>
+          <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(255,107,107,0.1)' : '#FFF0F3' }]}>
+            <Heart size={48} color={colors.primary} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No Connection Yet</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+            Bond with a partner to unlock shared stats, streaks, and insights.
+          </Text>
+          
+          <TouchableOpacity 
+             style={styles.linkCard}
+             activeOpacity={0.9}
+             onPress={() => router.push('/link')}
+          >
+            <LinearGradient
+              colors={[colors.primary, '#FF6B6B']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.linkCardGradient}
+            >
+              <View style={styles.linkIconContainer}>
+                <Link color="white" size={24} />
+              </View>
+              <Text style={styles.linkTitle}>Connect Partner</Text>
+              <ChevronRight color="white" size={20} />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </ScreenWrapper>
+    );
+  }
 
   return (
     <ScreenWrapper variant="dawn" noPadding>
@@ -396,6 +444,67 @@ const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 20,
     paddingTop: 120, // Space for FloatingHeader
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 100,
+  },
+  emptyIconCircle: {
+     width: 100,
+     height: 100,
+     borderRadius: 50,
+     justifyContent: 'center',
+     alignItems: 'center',
+     marginBottom: 24,
+  },
+  emptyTitle: {
+    fontFamily: 'Outfit',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontFamily: 'Quicksand',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  linkCard: {
+    width: '100%',
+    borderRadius: 20,
+    shadowColor: '#FF4B7D',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  linkCardGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderRadius: 20,
+    justifyContent: 'space-between',
+  },
+  linkIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  linkTitle: {
+    fontFamily: 'Outfit',
+    fontSize: 18,
+    fontWeight: '700',
+    color: 'white',
+    flex: 1,
   },
   heroSection: {
     alignItems: 'center',
