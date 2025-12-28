@@ -6,7 +6,7 @@ import { bondService } from '@/src/services/bondService';
 import { profileService } from '@/src/services/profileService';
 import { darkColors, lightColors } from '@/src/theme/colors';
 import { router } from 'expo-router';
-import { ArrowLeft, Check, Heart, LogOut, Moon, Save, Smartphone, Sun, User } from 'lucide-react-native';
+import { ArrowLeft, Bell, Check, ChevronRight, Heart, LogOut, Moon, Save, Smartphone, Sun, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
@@ -224,7 +224,14 @@ export default function ProfileScreen() {
           <View style={styles.inputGroup}>
             <Text style={[styles.label, { color: colors.muted }]}>Full Name</Text>
             <TextInput
-              style={[styles.input, { borderColor: 'rgba(0,0,0,0.1)', color: colors.text }]}
+              style={[
+                styles.input, 
+                { 
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', 
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+                  color: colors.text 
+                }
+              ]}
               value={name}
               onChangeText={setName}
               placeholder="Your name"
@@ -240,6 +247,7 @@ export default function ProfileScreen() {
                   key={opt}
                   style={[
                     styles.optionChip,
+                    { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                     gender === opt && { backgroundColor: colors.primary }
                   ]}
                   onPress={() => setGender(opt)}
@@ -276,6 +284,7 @@ export default function ProfileScreen() {
                       key={opt}
                       style={[
                         styles.optionChip,
+                        { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                         dynamic === opt && { backgroundColor: colors.primary }
                       ]}
                       onPress={() => setDynamic(opt)}
@@ -300,17 +309,21 @@ export default function ProfileScreen() {
              </Text>
           )}
         </View>
-
+        
         {/* APPEARANCE */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
-          <View style={[styles.themeOptions, { backgroundColor: colors.card, borderColor: 'rgba(0,0,0,0.05)', borderWidth: 1 }]}>
+          <View style={[styles.themeOptions, { 
+            backgroundColor: colors.card, 
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
+            borderWidth: 1 
+          }]}>
             {themeOptions.map((option, index) => (
               <TouchableOpacity
                 key={option.mode}
                 style={[
                   styles.themeOption,
-                  index < themeOptions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                  index < themeOptions.length - 1 && { borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' },
                   themeMode === option.mode && { backgroundColor: isDark ? 'rgba(255, 107, 148, 0.1)' : '#FFF0F3' },
                 ]}
                 onPress={() => setThemeMode(option.mode)}
@@ -330,6 +343,21 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+
+        <TouchableOpacity
+          style={[styles.menuButton, { 
+            backgroundColor: colors.card, 
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
+            borderWidth: 1 
+          }]}
+          onPress={() => router.push('/notifications' as any)}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: isDark ? 'rgba(255, 107, 148, 0.1)' : '#FFF0F3' }]}>
+             <Bell size={20} color={colors.primary} />
+          </View>
+          <Text style={[styles.menuLabel, { color: colors.text }]}>Notifications</Text>
+          <ChevronRight size={20} color={colors.muted} />
+        </TouchableOpacity>
 
         {/* SAVE BUTTON */}
         <TouchableOpacity 
@@ -382,7 +410,7 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.05)', // Dynamic in render
   },
   headerTitle: {
     fontSize: 20,
@@ -429,7 +457,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     fontFamily: 'Quicksand',
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    backgroundColor: 'rgba(0,0,0,0.02)', // Dynamic in render
   },
   dateInputContainer: {
     flexDirection: 'row',
@@ -444,7 +472,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 16,
     fontFamily: 'Quicksand',
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    backgroundColor: 'rgba(0,0,0,0.02)', // Dynamic in render
   },
   genderOptions: {
     flexDirection: 'row',
@@ -455,7 +483,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'rgba(0,0,0,0.05)', // Dynamic in render
   },
   optionText: {
     fontSize: 14,
@@ -519,6 +547,27 @@ const styles = StyleSheet.create({
   themeLabel: {
     fontFamily: 'Quicksand',
     fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+  menuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 32,
+    gap: 12,
+  },
+  menuIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: {
+    fontFamily: 'Quicksand',
+    fontSize: 16,
     fontWeight: '600',
     flex: 1,
   },

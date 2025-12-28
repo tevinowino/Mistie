@@ -1,5 +1,4 @@
 import { GameCard } from '@/src/components/dashboard/GameCard';
-import { OnboardingProgressCard } from '@/src/components/dashboard/OnboardingProgressCard';
 import { RelationshipDurationCard } from '@/src/components/dashboard/RelationshipDurationCard';
 import { HarmonyRing } from '@/src/components/HarmonyRing';
 import { NugButton } from '@/src/components/NugButton';
@@ -57,6 +56,7 @@ export default function Dashboard() {
   
   const [streak, setStreak] = useState(0);
   const [nugsCount, setNugsCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [isLinked, setIsLinked] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   const [bond, setBond] = useState<any>(null);
@@ -174,6 +174,23 @@ export default function Dashboard() {
     setIsLoading(false);
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh Notifications Count on Focus (e.g. coming back from reading them)
+      if (user) {
+        const fetchUnread = async () => {
+          const { count } = await supabase
+            .from('notifications')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('is_read', false);
+          setNotificationCount(count || 0);
+        };
+        fetchUnread();
+      }
+    }, [user])
+  );
+
   useEffect(() => {
     if (!bond?.id || !user) return;
 
@@ -259,10 +276,10 @@ export default function Dashboard() {
       />
       
       <FloatingHeader 
-        avatarSource={require('@/src/assets/images/avatar.png')}
+        avatarSource={user?.user_metadata?.avatar_url ? { uri: user.user_metadata.avatar_url } : undefined}
         onProfilePress={() => router.push('/profile')}
-        onNotificationPress={() => console.log('Notifications')}
-        notificationCount={dewStatus === 'partner-waiting' ? 1 : 0}
+        notificationCount={notificationCount}
+        onNotificationPress={() => router.push('/notifications' as any)}
         streak={streak}
       />
 
@@ -426,12 +443,11 @@ export default function Dashboard() {
 
       <IndividualOnboardingModal 
         visible={showIndividualModal} 
-        onComplete={() => {
+        onComplete={async () => {
           setShowIndividualModal(false);
-          refreshStatus();
-          // Optional: Check if bond is next immediately?
-          // For now, let the useEffect handle it on next render or user can click the card
-          setHasAutoOpenedUnique(false); // Valid to allow next auto-open (e.g. bond)
+          await refreshStatus();
+          // Reset flag only AFTER status is refreshed and confirmed complete
+          setHasAutoOpenedUnique(false); 
         }}
       />
 

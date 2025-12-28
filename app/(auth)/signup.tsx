@@ -1,12 +1,11 @@
-import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
-import { bondService } from '@/src/services/bondService';
-import { colors } from '@/src/theme/colors';
+import { useTheme } from '@/src/context/ThemeContext';
+import { darkColors, colors as defaultColors, lightColors } from '@/src/theme/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, User } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
@@ -15,6 +14,9 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { signUpWithPassword } = useAuth();
+
+  const { isDark } = useTheme();
+  const colors = isDark ? darkColors : lightColors;
 
   const handleSignup = async () => {
     if (!email || !password || !name) {
@@ -28,128 +30,168 @@ export default function SignupScreen() {
     if (error) {
       Alert.alert('Signup Failed', error.message);
     } else {
-      // Auto-create bond for invitations
-      if (data?.user) {
-        await bondService.createPendingBond(data.user.id);
-      }
       Alert.alert('Account Created', 'Welcome to Mistie.');
     }
   };
 
   return (
-    <ScreenWrapper variant="dawn">
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+    <View style={{ flex: 1 }}>
+      <ImageBackground 
+        source={require('@/src/assets/images/background-image.png')} 
+        style={styles.background}
+        resizeMode="cover"
       >
-        {/* HEADER */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft color={colors.text} size={24} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Join Mistie</Text>
-          <Text style={styles.subtitle}>Create your account</Text>
-        </View>
-
-        {/* FORM */}
-        <View style={styles.formCard}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Your Name</Text>
-            <View style={styles.inputContainer}>
-              <User color={colors.muted} size={20} />
-              <TextInput
-                style={styles.input}
-                placeholder="What should we call you?"
-                placeholderTextColor={colors.muted}
-                value={name}
-                onChangeText={setName}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <View style={styles.inputContainer}>
-              <Mail color={colors.muted} size={20} />
-              <TextInput
-                style={styles.input}
-                placeholder="you@email.com"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputContainer}>
-              <Lock color={colors.muted} size={20} />
-              <TextInput
-                style={styles.input}
-                placeholder="Create a password"
-                placeholderTextColor={colors.muted}
-                secureTextEntry={!showPassword}
-                value={password}
-                onChangeText={setPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                {showPassword ? (
-                  <EyeOff color={colors.muted} size={20} />
-                ) : (
-                  <Eye color={colors.muted} size={20} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.submitButton}
-            onPress={handleSignup}
-            disabled={isLoading}
-            activeOpacity={0.9}
+        <LinearGradient
+          colors={isDark 
+            ? ['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)'] 
+            : ['rgba(255,255,255,0.3)', 'rgba(255,255,255,0.85)']}
+          style={styles.overlay}
+        >
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.container}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
           >
-            <LinearGradient
-              colors={[colors.primary, colors.secondary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.submitGradient}
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.submitText}>
-                {isLoading ? 'Creating...' : 'Create Account'}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              {/* HEADER */}
+              <View style={styles.header}>
+                <TouchableOpacity 
+                  onPress={() => router.back()} 
+                  style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'white' }]}
+                >
+                  <ArrowLeft color={colors.text} size={24} />
+                </TouchableOpacity>
 
-        {/* FOOTER */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
-            <Text style={styles.footerLink}>Sign in</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </ScreenWrapper>
+                <View style={styles.brandContainer}>
+                  <Image 
+                    source={require('@/src/assets/images/logo-no-bg.png')} 
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                  <View>
+                    <Text style={[styles.title, { color: colors.text }]}>Join Mistie</Text>
+                    <Text style={[styles.subtitle, { color: colors.muted }]}>Create your account</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* FORM */}
+              <View style={[styles.formCard, { backgroundColor: isDark ? 'rgba(26, 5, 16, 0.95)' : 'rgba(255,255,255,0.95)' }]}>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.muted }]}>Your Name</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F8F8F8' }]}>
+                    <User color={colors.muted} size={20} />
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="What should we call you?"
+                      placeholderTextColor={colors.muted}
+                      value={name}
+                      onChangeText={setName}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.muted }]}>Email</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F8F8F8' }]}>
+                    <Mail color={colors.muted} size={20} />
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="you@email.com"
+                      placeholderTextColor={colors.muted}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={setEmail}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: colors.muted }]}>Password</Text>
+                  <View style={[styles.inputContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F8F8F8' }]}>
+                    <Lock color={colors.muted} size={20} />
+                    <TextInput
+                      style={[styles.input, { color: colors.text }]}
+                      placeholder="Create a password"
+                      placeholderTextColor={colors.muted}
+                      secureTextEntry={!showPassword}
+                      value={password}
+                      onChangeText={setPassword}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                      {showPassword ? (
+                        <EyeOff color={colors.muted} size={20} />
+                      ) : (
+                        <Eye color={colors.muted} size={20} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <TouchableOpacity 
+                  style={styles.submitButton}
+                  onPress={handleSignup}
+                  disabled={isLoading}
+                  activeOpacity={0.9}
+                >
+                  <LinearGradient
+                    colors={[colors.primary, colors.secondary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitGradient}
+                  >
+                    <Text style={styles.submitText}>
+                      {isLoading ? 'Creating...' : 'Create Account'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+
+              {/* FOOTER */}
+              <View style={styles.footer}>
+                <Text style={[styles.footerText, { color: colors.muted }]}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
+                  <Text style={[styles.footerLink, { color: colors.primary }]}>Sign in</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </LinearGradient>
+      </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    flex: 1,
+  },
   container: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
+    paddingVertical: 40,
   },
   header: {
-    paddingTop: 60,
+    marginTop: 20,
     marginBottom: 32,
   },
   backButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'white',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -159,23 +201,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  brandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  logo: {
+    width: 60,
+    height: 60,
+  },
   title: {
     fontFamily: 'Outfit',
     fontSize: 28,
     fontWeight: 'bold',
-    color: colors.text,
     marginBottom: 4,
   },
   subtitle: {
     fontFamily: 'Quicksand',
-    fontSize: 15,
-    color: colors.muted,
+    fontSize: 16,
+    fontWeight: '500',
   },
   formCard: {
-    backgroundColor: 'white',
     borderRadius: 24,
     padding: 24,
-    shadowColor: colors.primary,
+    shadowColor: defaultColors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
     shadowRadius: 20,
@@ -187,14 +236,12 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'Quicksand',
     fontSize: 13,
-    color: colors.muted,
     marginBottom: 8,
     fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F8F8',
     borderRadius: 14,
     paddingHorizontal: 16,
     height: 54,
@@ -204,7 +251,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: 'Quicksand',
     fontSize: 15,
-    color: colors.text,
   },
   submitButton: {
     borderRadius: 16,
@@ -225,17 +271,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 32,
+    marginBottom: 20,
   },
   footerText: {
     fontFamily: 'Quicksand',
     fontSize: 14,
-    color: colors.muted,
   },
   footerLink: {
     fontFamily: 'Quicksand',
     fontSize: 14,
-    color: colors.primary,
     fontWeight: '600',
   },
 });
-

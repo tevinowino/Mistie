@@ -10,8 +10,11 @@ import './globals.css';
 // Create a client
 const queryClient = new QueryClient();
 
+import { useNotifications } from '@/src/hooks/useNotifications';
+
 function RootLayoutNav() {
   const { session, isLoading } = useAuth();
+  useNotifications(); // Initialize notifications
   const segments = useSegments();
   const router = useRouter();
 

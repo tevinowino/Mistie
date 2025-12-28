@@ -6,6 +6,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useTheme } from '@/src/context/ThemeContext';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors, lightColors as staticColors } from '@/src/theme/colors';
+import { calculateMinCoupleAge } from '@/src/utils/ageUtils';
 import { GAMES_METADATA, getGameBackgroundImage, getGamesByCategory } from '@/src/utils/gameImages';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
@@ -108,6 +109,7 @@ export default function GamesScreen() {
   const { isDark } = useTheme();
   const colors = isDark ? darkColors : lightColors;
   const [streak, setStreak] = useState(0);
+  const [minAge, setMinAge] = useState<number>(18);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const scrollX = useSharedValue(0);
 
@@ -131,10 +133,18 @@ export default function GamesScreen() {
     const { data } = await bondService.getUserBond(user.id);
     if (data) {
       setStreak(data.streak_count || 0);
+      
+      // Calculate min age from bond profiles
+      const age = calculateMinCoupleAge(
+        data.user_1_profile?.birth_date,
+        data.user_2_profile?.birth_date
+      );
+      setMinAge(age);
     }
   };
 
-  const navigateToGame = (slug: string) => {
+  const navigateToGame = (slug: string, locked: boolean = false) => {
+    if (locked) return;
     router.push(`/games/${slug}` as any);
   };
 
@@ -151,17 +161,21 @@ export default function GamesScreen() {
 
   // All games for swipe view
   const allGames = GAMES_METADATA;
+  const isCoupleUnderage = minAge < 18;
 
-  const renderSwipeCard = ({ item }: { item: typeof allGames[0] }) => (
-    <SwipeableGameCard
-      title={item.title}
-      subtitle={item.subtitle}
-      gradientColors={item.gradientColors}
-      backgroundImage={getGameBackgroundImage(item.slug)}
-      categoryLabel={CATEGORY_LABELS[item.category]}
-      onPress={() => navigateToGame(item.slug)}
-    />
-  );
+  const renderSwipeCard = ({ item }: { item: typeof allGames[0] }) => {
+    const isLocked = isCoupleUnderage && item.category === 'intimacy';
+    return (
+      <SwipeableGameCard
+        title={item.title}
+        subtitle={item.subtitle}
+        gradientColors={item.gradientColors}
+        backgroundImage={getGameBackgroundImage(item.slug)}
+        categoryLabel={CATEGORY_LABELS[item.category]}
+        onPress={() => navigateToGame(item.slug, isLocked)}
+      />
+    );
+  };
 
   return (
     <ScreenWrapper variant="dawn">
@@ -215,7 +229,7 @@ export default function GamesScreen() {
                 categoryLabel={CATEGORY_LABELS[item.category]}
                 index={index}
                 scrollX={scrollX}
-                onPress={() => navigateToGame(item.slug)}
+                onPress={() => navigateToGame(item.slug, isCoupleUnderage && item.category === 'intimacy')}
               />
             )}
             keyExtractor={(item) => item.slug}
@@ -320,7 +334,8 @@ export default function GamesScreen() {
               icon={GAME_ICONS[game.slug]}
               gradientColors={game.gradientColors}
               backgroundImage={getGameBackgroundImage(game.slug)}
-              onPress={() => navigateToGame(game.slug)}
+              onPress={() => navigateToGame(game.slug, isCoupleUnderage)}
+              isLocked={isCoupleUnderage}
             />
           ))}
 

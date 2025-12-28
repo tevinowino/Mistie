@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { notificationService } from './notificationService';
 
 // Generate a random 6-digit code
 const generateBondCode = () => {
@@ -16,8 +17,8 @@ export const bondService = {
         dynamic,
         is_onboarding_complete,
         anniversary_date,
-        user_1_profile:profiles!bonds_user_1_id_fkey(id, display_name, avatar_url),
-        user_2_profile:profiles!bonds_user_2_id_fkey(id, display_name, avatar_url)
+        user_1_profile:profiles!bonds_user_1_id_fkey(id, display_name, avatar_url, birth_date),
+        user_2_profile:profiles!bonds_user_2_id_fkey(id, display_name, avatar_url, birth_date)
       `)
       .or(`user_1_id.eq.${userId},user_2_id.eq.${userId}`)
       .order('status', { ascending: true }) // 'couple' comes before 'pending' alphabetically
@@ -35,19 +36,33 @@ export const bondService = {
       return { data: existing, error: null };
     }
 
-    const code = generateBondCode();
-    
-    const { data, error } = await supabase
-      .from('bonds')
-      .insert({
-        user_1_id: userId,
-        status: 'pending',
-        connection_code: code,
-      })
-      .select()
-      .single();
+    // 2. Try to create with unique code (retry up to 3 times)
+    let attempts = 0;
+    while (attempts < 3) {
+      const code = generateBondCode();
+      const { data, error } = await supabase
+        .from('bonds')
+        .insert({
+          user_1_id: userId,
+          status: 'pending',
+          connection_code: code,
+        })
+        .select()
+        .single();
 
-    return { data, error };
+      if (!error && data) {
+        return { data, error: null };
+      }
+
+      // If error is NOT a uniqueness violation (23505), fail immediately
+      if (error && error.code !== '23505') {
+        return { data: null, error };
+      }
+      
+      attempts++;
+    }
+
+    return { data: null, error: new Error("Failed to generate unique code after 3 attempts") };
   },
 
   // User B joins via code
@@ -145,10 +160,9 @@ export const bondService = {
         .single();
 
       // INCREMENT STREAK MANUALLY
-      // (The trigger might fail if is_revealed is set to true in the update, so we do it here)
       const { data: bond } = await supabase
         .from('bonds')
-        .select('streak_count, best_streak')
+        .select('user_1_id, user_2_id, streak_count, best_streak')
         .eq('id', updatedDew.bond_id)
         .single();
       
@@ -163,9 +177,41 @@ export const bondService = {
             best_streak: newBest
           })
           .eq('id', updatedDew.bond_id);
+
+        // NOTIFICATION: Dew Revealed
+        const partnerId = isUser1 ? bond.user_2_id : bond.user_1_id;
+        const myId = isUser1 ? bond.user_1_id : bond.user_2_id;
+        if (partnerId && myId) {
+            // Get my name
+            const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single();
+            const myName = myProfile?.display_name || 'Your partner';
+             // Notify partner
+            await notificationService.notifyDewRevealed(partnerId, myName);
+        }
       }
         
       return { data: revealedDew, error: revealError };
+    } else if (updatedDew && (!updatedDew.user_1_response || !updatedDew.user_2_response)) {
+         // NOTIFICATION: Waiting (One person just answered)
+         // Only notify if THIS action was the one that made it waiting (so usually one person answers)
+         // And check that we are not just editing an answer? Assuming append-only for now or edit triggers again (fine).
+         
+         const { data: bond } = await supabase
+            .from('bonds')
+            .select('user_1_id, user_2_id')
+            .eq('id', updatedDew.bond_id)
+            .single();
+
+         if (bond) {
+             const partnerId = isUser1 ? bond.user_2_id : bond.user_1_id;
+             const myId = isUser1 ? bond.user_1_id : bond.user_2_id;
+             
+             if (partnerId && myId) {
+                 const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single();
+                 const myName = myProfile?.display_name || 'Your partner';
+                 await notificationService.notifyDewWaiting(partnerId, myName);
+             }
+         }
     }
 
     return { data: updatedDew, error: null };
@@ -173,7 +219,7 @@ export const bondService = {
 
   // --- NUGS METHODS ---
 
-  async sendNug(bondId: string, senderId: string, type: 'silent' | 'note', content?: string) {
+  async sendNug(bondId: string, senderId: string, type: 'silent' | 'note', content?: string, senderName?: string) {
     const { data, error } = await supabase
       .from('nugs')
       .insert({
@@ -184,6 +230,24 @@ export const bondService = {
       })
       .select()
       .single();
+
+    if (!error && data) {
+         // NOTIFICATION: Nug Received
+         // Need recipient ID
+         const { data: bond } = await supabase.from('bonds').select('user_1_id, user_2_id').eq('id', bondId).single();
+         if (bond) {
+             const recipientId = bond.user_1_id === senderId ? bond.user_2_id : bond.user_1_id;
+             if (recipientId) {
+                 let finalSenderName: string = senderName || '';
+                 if (!finalSenderName) {
+                      const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', senderId).single();
+                      finalSenderName = profile?.display_name || 'Your partner';
+                 }
+                 
+                 await notificationService.notifyNugReceived(recipientId, finalSenderName);
+             }
+         }
+    }
 
     return { data, error };
   },

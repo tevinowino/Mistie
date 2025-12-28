@@ -34,7 +34,7 @@ export const FloatingHeader: React.FC<FloatingHeaderProps> = ({
       {/* LOGO + STREAK (Left) */}
       <View style={styles.leftSection}>
         <Image 
-          source={require('@/src/assets/images/logo-no-bg.png')} 
+          source={require('@/src/assets/images/full-logo-no-bg.png')} 
           style={styles.logoImage}
           resizeMode="contain"
         />
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(26, 5, 16, 0.92)',
   },
   logoImage: {
-    width: 30,
+    width: 110,
   },
   leftSection: {
     flexDirection: 'row',

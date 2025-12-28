@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight, Lock } from 'lucide-react-native';
 import React, { ReactNode } from 'react';
 import {
     ImageBackground,
@@ -23,6 +23,7 @@ interface GameCardProps {
   gradientColors: readonly [string, string, ...string[]];
   backgroundImage?: any;
   onPress: () => void;
+  isLocked?: boolean;
 }
 
 export const GameCard: React.FC<GameCardProps> = ({ 
@@ -31,15 +32,18 @@ export const GameCard: React.FC<GameCardProps> = ({
   icon, 
   gradientColors,
   backgroundImage,
-  onPress 
+  onPress,
+  isLocked = false
 }) => {
   const pressed = useSharedValue(1);
 
   const handlePressIn = () => {
+    if (isLocked) return;
     pressed.value = withSpring(0.97, { damping: 15 });
   };
 
   const handlePressOut = () => {
+    if (isLocked) return;
     pressed.value = withSpring(1, { damping: 15 });
   };
 
@@ -57,15 +61,19 @@ export const GameCard: React.FC<GameCardProps> = ({
         <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text>
       </View>
       <View style={styles.arrowContainer}>
-        <ChevronRight color="rgba(255,255,255,0.9)" size={24} />
+        {isLocked ? (
+           <Lock color="rgba(255,255,255,0.6)" size={20} />
+        ) : (
+           <ChevronRight color="rgba(255,255,255,0.9)" size={24} />
+        )}
       </View>
     </View>
   );
 
   return (
     <AnimatedTouchable 
-      activeOpacity={1} 
-      onPress={onPress}
+      activeOpacity={isLocked ? 1 : 0.7} 
+      onPress={isLocked ? undefined : onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={[styles.container, animatedStyle]}
@@ -87,6 +95,7 @@ export const GameCard: React.FC<GameCardProps> = ({
             end={{ x: 1, y: 0.5 }}
             style={styles.gradient}
           >
+            {isLocked && <View style={styles.lockedOverlay} />}
             {CardContent}
           </LinearGradient>
         </ImageBackground>
@@ -97,6 +106,7 @@ export const GameCard: React.FC<GameCardProps> = ({
           end={{ x: 1, y: 0.5 }}
           style={styles.gradient}
         >
+          {isLocked && <View style={styles.lockedOverlay} />}
           {CardContent}
         </LinearGradient>
       )}
@@ -174,5 +184,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+  },
+  lockedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1,
   },
 });

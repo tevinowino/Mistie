@@ -1,8 +1,9 @@
 import { MistButton } from '@/src/components/ui/MistButton';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useTheme } from '@/src/context/ThemeContext';
 import { bondService } from '@/src/services/bondService';
-import { colors } from '@/src/theme/colors';
+import { colors, darkColors, lightColors } from '@/src/theme/colors';
 import { router } from 'expo-router';
 import { ArrowLeft, Copy, Heart, QrCode, Share2, Sparkles } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -10,6 +11,9 @@ import { Alert, Clipboard, Keyboard, KeyboardAvoidingView, Platform, StyleSheet,
 
 export default function LinkScreen() {
   const { user, signOut } = useAuth();
+  const { isDark } = useTheme();
+  const colors = isDark ? darkColors : lightColors;
+
   const [activeTab, setActiveTab] = useState<'join' | 'invite'>('join');
   const [code, setCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
@@ -94,30 +98,34 @@ export default function LinkScreen() {
     <ScreenWrapper variant="dawn">
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.container}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
             {/* HEADER */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={handleSignOut} style={styles.backButton}>
-                    <ArrowLeft color={colors.coral} size={24} />
+                <TouchableOpacity 
+                  onPress={handleSignOut} 
+                  style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'white' }]}
+                >
+                    <ArrowLeft color={colors.primary} size={24} />
                 </TouchableOpacity>
                 <View>
-                    <Text style={styles.title}>Partner Link</Text>
-                    <Text style={styles.subtitle}>Connect with your person</Text>
+                    <Text style={[styles.title, { color: colors.text }]}>Partner Link</Text>
+                    <Text style={[styles.subtitle, { color: colors.muted }]}>Connect with your person</Text>
                 </View>
             </View>
 
             {/* TAB SELECTOR */}
-            <View style={styles.tabContainer}>
+            <View style={[styles.tabContainer, { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.6)' }]}>
                 <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'join' && styles.activeTab]}
+                    style={[styles.tab, activeTab === 'join' && styles.activeTab, activeTab === 'join' && { backgroundColor: colors.card }]}
                     onPress={() => setActiveTab('join')}
                 >
                     <Text style={[styles.tabText, activeTab === 'join' && styles.activeTabText]}>I have a code</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'invite' && styles.activeTab]}
+                    style={[styles.tab, activeTab === 'invite' && styles.activeTab, activeTab === 'invite' && { backgroundColor: colors.card }]}
                     onPress={() => setActiveTab('invite')}
                 >
                     <Text style={[styles.tabText, activeTab === 'invite' && styles.activeTabText]}>Share my code</Text>
@@ -127,18 +135,21 @@ export default function LinkScreen() {
             {/* CONTENT AREA */}
             <View style={styles.content}>
                 {activeTab === 'join' ? (
-                    <View style={styles.card}>
+                    <View style={[styles.card, { backgroundColor: colors.card }]}>
                         <View style={styles.iconHeader}>
-                            <View style={[styles.iconCircle, { backgroundColor: '#E0F7FA' }]}>
+                            <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(0,172,193,0.15)' : '#E0F7FA' }]}>
                                 <QrCode color="#00ACC1" size={32} />
                             </View>
                         </View>
-                        <Text style={styles.cardTitle}>Enter Invitation Code</Text>
-                        <Text style={styles.cardDesc}>Enter the 6-digit code shared by your partner to connect.</Text>
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Enter Invitation Code</Text>
+                        <Text style={[styles.cardDesc, { color: colors.muted }]}>Enter the 6-digit code shared by your partner to connect.</Text>
                         
-                        <View style={styles.inputWrapper}>
+                        <View style={[styles.inputWrapper, { 
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F8F8F8',
+                          borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#EEEEEE'
+                        }]}>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, { color: colors.text }]}
                                 placeholder="000000"
                                 placeholderTextColor={colors.muted}
                                 keyboardType="number-pad"
@@ -156,20 +167,23 @@ export default function LinkScreen() {
                         />
                     </View>
                 ) : (
-                    <View style={styles.card}>
+                    <View style={[styles.card, { backgroundColor: colors.card }]}>
                         <View style={styles.iconHeader}>
-                            <View style={[styles.iconCircle, { backgroundColor: '#F3E5F5' }]}>
+                            <View style={[styles.iconCircle, { backgroundColor: isDark ? 'rgba(142,36,170,0.15)' : '#F3E5F5' }]}>
                                 <Sparkles color="#8E24AA" size={32} />
                             </View>
                         </View>
-                        <Text style={styles.cardTitle}>Your Invitation Code</Text>
-                        <Text style={styles.cardDesc}>Share this code with your partner securely.</Text>
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Your Invitation Code</Text>
+                        <Text style={[styles.cardDesc, { color: colors.muted }]}>Share this code with your partner securely.</Text>
 
                         {generatedCode ? (
                             <TouchableOpacity 
                                 activeOpacity={0.7}
                                 onPress={handleCopy}
-                                style={styles.codeDisplay}
+                                style={[styles.codeDisplay, { 
+                                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FAFAFA',
+                                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#EEEEEE'
+                                }]}
                             >
                                 <Text style={styles.codeText}>{generatedCode}</Text>
                                 <View style={styles.copyBadge}>
@@ -182,13 +196,13 @@ export default function LinkScreen() {
                             </TouchableOpacity>
                         ) : (
                             <View style={styles.loadingBox}>
-                                <Text style={styles.loadingText}>Generating magic code...</Text>
+                                <Text style={[styles.loadingText, { color: colors.muted }]}>Generating magic code...</Text>
                             </View>
                         )}
 
-                        <View style={styles.pulseContainer}>
-                            <Heart color={colors.coral} size={20} />
-                            <Text style={styles.waiting}>Waiting for them to join...</Text>
+                        <View style={[styles.pulseContainer, { backgroundColor: isDark ? 'rgba(255, 75, 125, 0.15)' : '#FFF5F5' }]}>
+                            <Heart color={colors.primary} size={20} />
+                            <Text style={[styles.waiting, { color: colors.primary }]}>Waiting for them to join...</Text>
                         </View>
 
                         <MistButton 
