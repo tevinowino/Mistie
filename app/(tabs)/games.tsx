@@ -180,7 +180,6 @@ export default function GamesScreen() {
   return (
     <ScreenWrapper variant="dawn" noPadding>
       <FloatingHeader 
-        avatarSource={require('@/src/assets/images/avatar.png')}
         onProfilePress={() => router.push('/profile')}
         onNotificationPress={() => console.log('Notifications')}
         streak={streak}
