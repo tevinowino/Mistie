@@ -190,8 +190,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   logo: {
-    width: 60,
-    height: 60,
+    width: 90,
+    height: 90,
   },
   title: {
     fontFamily: 'Outfit',

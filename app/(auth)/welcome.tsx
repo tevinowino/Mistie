@@ -28,12 +28,10 @@ export default function WelcomeScreen() {
             {/* LOGO & BRANDING */}
             <View style={styles.brandSection}>
               <Image 
-                source={require('@/src/assets/images/logo-no-bg.png')} 
+                source={require('@/src/assets/images/full-logo-no-bg.png')} 
                 style={styles.logo}
                 resizeMode="contain"
               />
-              <Text style={[styles.title, { color: isDark ? '#FFF' : '#2D2D2D' }]}>Mistie</Text>
-              <Text style={[styles.subtitle, { color: isDark ? '#CCC' : '#4B5563' }]}>A space for just us two</Text>
             </View>
 
             {/* FEATURES PREVIEW */}
@@ -99,8 +97,8 @@ const styles = StyleSheet.create({
     marginTop: 80,
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 200,
+    height: 200,
     marginBottom: 16,
   },
   title: {

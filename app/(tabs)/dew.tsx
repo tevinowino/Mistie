@@ -162,7 +162,7 @@ export default function DailyDew() {
   }
 
   return (
-    <ScreenWrapper variant="dawn">
+    <ScreenWrapper variant="dawn" noPadding>
       <FloatingHeader 
         avatarSource={require('@/src/assets/images/avatar.png')}
         onProfilePress={() => router.push('/profile')}

@@ -201,7 +201,7 @@ export default function Pulse() {
   const harmonyLabel = harmony >= 80 ? 'Thriving' : harmony >= 60 ? 'Growing' : harmony >= 40 ? 'Budding' : 'New';
 
   return (
-    <ScreenWrapper variant="dawn">
+    <ScreenWrapper variant="dawn" noPadding>
       <FloatingHeader 
         avatarSource={require('@/src/assets/images/avatar.png')}
         onProfilePress={() => router.push('/profile')}

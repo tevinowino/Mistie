@@ -68,7 +68,7 @@ export default function SignupScreen() {
 
                 <View style={styles.brandContainer}>
                   <Image 
-                    source={require('@/src/assets/images/logo-no-bg.png')} 
+                    source={require('@/src/assets/images/full-logo-no-bg.png')} 
                     style={styles.logo}
                     resizeMode="contain"
                   />

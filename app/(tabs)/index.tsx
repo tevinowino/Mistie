@@ -6,6 +6,7 @@ import { NugReceivedModal } from '@/src/components/NugReceivedModal';
 import { NugSentOverlay } from '@/src/components/NugSentOverlay';
 import { BondOnboardingModal } from '@/src/components/onboarding/BondOnboardingModal';
 import { IndividualOnboardingModal } from '@/src/components/onboarding/IndividualOnboardingModal';
+import { WalkthroughModal } from '@/src/components/onboarding/WalkthroughModal';
 import { FloatingHeader } from '@/src/components/ui/FloatingHeader';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
@@ -15,6 +16,7 @@ import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
 import { darkColors, lightColors } from '@/src/theme/colors';
 import { getGameBackgroundImage, getGamesByCategory } from '@/src/utils/gameImages';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
@@ -71,11 +73,23 @@ export default function Dashboard() {
   const { isUserProfileComplete, isBondProfileComplete, bond: onboardingBond, isLoading: onboardingLoading, refreshStatus } = useOnboardingStatus();
   const [showIndividualModal, setShowIndividualModal] = useState(false);
   const [showBondModal, setShowBondModal] = useState(false);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasAutoOpenedUnique, setHasAutoOpenedUnique] = useState(false);
 
   useEffect(() => {
-    // Auto-trigger onboarding if needed (Immediate flow)
-    if (!onboardingLoading && !hasAutoOpenedUnique) {
+    // Check if user has seen intro
+    const checkIntro = async () => {
+      const hasSeen = await AsyncStorage.getItem('has_seen_intro');
+      if (!hasSeen) {
+        setShowWalkthrough(true);
+      }
+    };
+    checkIntro();
+  }, []);
+
+  useEffect(() => {
+    // Auto-trigger onboarding if needed (Immediate flow) - only if not showing walkthrough
+    if (!onboardingLoading && !hasAutoOpenedUnique && !showWalkthrough) {
        if (!isUserProfileComplete) {
          setShowIndividualModal(true);
          setHasAutoOpenedUnique(true); // Don't spam
@@ -85,7 +99,7 @@ export default function Dashboard() {
          setHasAutoOpenedUnique(true);
        }
     }
-  }, [onboardingLoading, isUserProfileComplete, isUserProfileComplete, isLinked, isBondProfileComplete, hasAutoOpenedUnique]);
+  }, [onboardingLoading, isUserProfileComplete, isUserProfileComplete, isLinked, isBondProfileComplete, hasAutoOpenedUnique, showWalkthrough]);
 
   const [showSentAnimation, setShowSentAnimation] = useState(false);
 
@@ -269,7 +283,7 @@ export default function Dashboard() {
   );
 
   return (
-    <ScreenWrapper variant="dawn">
+    <ScreenWrapper variant="dawn" noPadding>
       <NugSentOverlay 
         visible={showSentAnimation} 
         onAnimationComplete={() => setShowSentAnimation(false)} 
@@ -457,6 +471,15 @@ export default function Dashboard() {
         onComplete={() => {
           setShowBondModal(false);
           refreshStatus();
+        }}
+      />
+      
+      <WalkthroughModal 
+        visible={showWalkthrough}
+        onComplete={() => {
+          setShowWalkthrough(false);
+          // Check for other onboardings after walkthrough closes
+          setHasAutoOpenedUnique(false); 
         }}
       />
     </ScreenWrapper>

@@ -1,9 +1,9 @@
+import { CustomTabBar } from '@/src/components/navigation/CustomTabBar';
 import { useTheme } from '@/src/context/ThemeContext';
 import { darkColors, lightColors } from '@/src/theme/colors';
-import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import { Activity, Droplets, Gamepad2, Heart, Home } from 'lucide-react-native';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 export default function TabLayout() {
   const { isDark } = useTheme();
@@ -16,62 +16,26 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          position: 'absolute',
-          bottom: 30,
-          left: 24,
-          right: 24,
-          height: 72,
-          borderRadius: 36,
-          elevation: 10,
-          borderTopWidth: 0,
-          backgroundColor: Platform.OS === 'ios' ? 'transparent' : navbarBg,
-          overflow: 'hidden',
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.15,
-          shadowRadius: 20,
-          borderWidth: isDark ? 1 : 0,
-          borderColor: isDark ? 'rgba(255, 75, 125, 0.2)' : 'transparent',
-        },
-        tabBarBackground: () => (
-          <BlurView 
-            intensity={isDark ? 50 : 90} 
-            tint={isDark ? 'dark' : 'light'} 
-            style={[
-              StyleSheet.absoluteFill, 
-              styles.blurContainer,
-              isDark && { backgroundColor: 'rgba(26, 5, 16, 0.8)' },
-            ]} 
-          />
-        ),
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarItemStyle: {
-          paddingVertical: 10,
-        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
+          title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconWrapper, focused && [styles.activeIconWrapper, { backgroundColor: `${colors.primary}15` }]]}>
-              <Home color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
-            </View>
+            <Home color={color} size={24} strokeWidth={1.5} />
           ),
         }}
       />
       <Tabs.Screen
         name="dew"
         options={{
+          title: 'Dew',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconWrapper, focused && [styles.activeIconWrapper, { backgroundColor: `${colors.primary}15` }]]}>
-              <Droplets color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
-            </View>
+            <Droplets color={color} size={24} strokeWidth={1.5} />
           ),
         }}
       />
@@ -92,20 +56,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="games"
         options={{
+          title: 'Games',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconWrapper, focused && [styles.activeIconWrapper, { backgroundColor: `${colors.primary}15` }]]}>
-              <Gamepad2 color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
-            </View>
+            <Gamepad2 color={color} size={24} strokeWidth={1.5} />
           ),
         }}
       />
       <Tabs.Screen
         name="pulse"
         options={{
+          title: 'Pulse',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.iconWrapper, focused && [styles.activeIconWrapper, { backgroundColor: `${colors.primary}15` }]]}>
-              <Activity color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
-            </View>
+            <Activity color={color} size={24} strokeWidth={1.5} />
           ),
         }}
       />

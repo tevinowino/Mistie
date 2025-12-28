@@ -159,33 +159,24 @@ export const bondService = {
         .select()
         .single();
 
-      // INCREMENT STREAK MANUALLY
+      // STREAK managed by Database Trigger (handle_dew_completion)
+        
+      // NOTIFICATION: Dew Revealed
+      // We still want to notify the partner that the dew was revealed
       const { data: bond } = await supabase
         .from('bonds')
-        .select('user_1_id, user_2_id, streak_count, best_streak')
+        .select('user_1_id, user_2_id')
         .eq('id', updatedDew.bond_id)
         .single();
       
       if (bond) {
-        const newStreak = (bond.streak_count || 0) + 1;
-        const newBest = Math.max(bond.best_streak || 0, newStreak);
-        
-        await supabase
-          .from('bonds')
-          .update({ 
-            streak_count: newStreak,
-            best_streak: newBest
-          })
-          .eq('id', updatedDew.bond_id);
-
-        // NOTIFICATION: Dew Revealed
         const partnerId = isUser1 ? bond.user_2_id : bond.user_1_id;
         const myId = isUser1 ? bond.user_1_id : bond.user_2_id;
         if (partnerId && myId) {
             // Get my name
             const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single();
             const myName = myProfile?.display_name || 'Your partner';
-             // Notify partner
+              // Notify partner
             await notificationService.notifyDewRevealed(partnerId, myName);
         }
       }
@@ -193,9 +184,6 @@ export const bondService = {
       return { data: revealedDew, error: revealError };
     } else if (updatedDew && (!updatedDew.user_1_response || !updatedDew.user_2_response)) {
          // NOTIFICATION: Waiting (One person just answered)
-         // Only notify if THIS action was the one that made it waiting (so usually one person answers)
-         // And check that we are not just editing an answer? Assuming append-only for now or edit triggers again (fine).
-         
          const { data: bond } = await supabase
             .from('bonds')
             .select('user_1_id, user_2_id')
