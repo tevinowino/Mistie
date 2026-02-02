@@ -5,6 +5,7 @@ import { Flame, Monitor, Users, Zap } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
     Dimensions,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -42,12 +43,14 @@ export function GameSetup({ gameType, onStart, onCancel }: GameSetupProps) {
             <LinearGradient
               colors={(gameType.gradient_colors || [colors.primary, colors.secondary]) as [string, string]}
               style={styles.gameIcon}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
             >
-                <Zap color="white" size={32} />
+                <Zap color="white" size={28} />
             </LinearGradient>
-            <View>
+            <View style={styles.gameInfo}>
               <Text style={styles.gameTitle}>{gameType.name}</Text>
-              <Text style={styles.gameDescription}>
+              <Text style={styles.gameDescription} numberOfLines={2}>
                 {gameType.description || 'Configure your settings below'}
               </Text>
             </View>
@@ -56,29 +59,36 @@ export function GameSetup({ gameType, onStart, onCancel }: GameSetupProps) {
           {/* Settings */}
           <View style={styles.settingsContainer}>
             {gameType.has_spice_meter && (
-              <View style={styles.settingSection}>
-                <Text style={styles.sectionLabel}>Spice Meter 🌶️</Text>
+              <View style={[styles.settingSection, styles.settingCard]}>
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionLabel}>Spice Meter</Text>
+                    <Text style={[styles.sectionValue, { color: getHeatColor(heatLevel) }]}>
+                        {getHeatLabel(heatLevel)}
+                    </Text>
+                </View>
+                
                 <View style={styles.optionsRow}>
                   {[1, 2, 3].map((level) => (
                     <TouchableOpacity
                       key={level}
+                      activeOpacity={0.8}
                       style={[
                         styles.optionButton,
                         heatLevel === level && styles.optionButtonSelected,
-                        { borderColor: getHeatColor(level) }
+                        heatLevel === level && { backgroundColor: getHeatColor(level) + '20', borderColor: getHeatColor(level) }
                       ]}
                       onPress={() => setHeatLevel(level)}
                     >
                       <Flame 
-                        color={heatLevel === level ? 'white' : getHeatColor(level)} 
-                        size={20} 
-                        fill={heatLevel === level ? 'white' : 'transparent'}
+                        color={heatLevel === level ? getHeatColor(level) : 'rgba(255,255,255,0.4)'} 
+                        size={24} 
+                        fill={heatLevel === level ? getHeatColor(level) : 'transparent'}
                       />
                       <Text style={[
                         styles.optionText,
-                        heatLevel === level && styles.optionTextSelected
+                        heatLevel === level && { color: getHeatColor(level), fontWeight: '700' }
                       ]}>
-                        {getHeatLabel(level)}
+                        {level}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -87,36 +97,43 @@ export function GameSetup({ gameType, onStart, onCancel }: GameSetupProps) {
             )}
 
             {gameType.has_virtual_mode && (
-                <View style={[styles.settingSection, !gameType.has_spice_meter && { marginTop: 0 }]}>
-                  <Text style={styles.sectionLabel}>Context 📍</Text>
+                <View style={[styles.settingSection, styles.settingCard, !gameType.has_spice_meter && { marginTop: 0 }]}>
+                   <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionLabel}>Environment</Text>
+                    <Text style={[styles.sectionValue, { color: colors.secondary }]}>
+                        {mode === 'in_person' ? 'Together' : 'Remote'}
+                    </Text>
+                  </View>
                   <View style={styles.optionsRow}>
                     <TouchableOpacity
+                      activeOpacity={0.8}
                       style={[
                         styles.optionButton,
                         mode === 'in_person' && styles.optionButtonSelected,
-                        { borderColor: colors.primary }
+                        mode === 'in_person' && { backgroundColor: colors.primary + '20', borderColor: colors.primary }
                       ]}
                       onPress={() => setMode('in_person')}
                     >
-                      <Users color={mode === 'in_person' ? 'white' : colors.primary} size={20} />
+                      <Users color={mode === 'in_person' ? colors.primary : 'rgba(255,255,255,0.4)'} size={22} />
                       <Text style={[
                         styles.optionText,
-                        mode === 'in_person' && styles.optionTextSelected
+                        mode === 'in_person' && { color: colors.primary, fontWeight: '700' }
                       ]}>In Person</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      activeOpacity={0.8}
                       style={[
                         styles.optionButton,
                         mode === 'virtual' && styles.optionButtonSelected,
-                        { borderColor: colors.secondary }
+                        mode === 'virtual' && { backgroundColor: colors.secondary + '20', borderColor: colors.secondary }
                       ]}
                       onPress={() => setMode('virtual')}
                     >
-                      <Monitor color={mode === 'virtual' ? 'white' : colors.secondary} size={20} />
+                      <Monitor color={mode === 'virtual' ? colors.secondary : 'rgba(255,255,255,0.4)'} size={22} />
                       <Text style={[
                         styles.optionText,
-                        mode === 'virtual' && styles.optionTextSelected
+                        mode === 'virtual' && { color: colors.secondary, fontWeight: '700' }
                       ]}>Virtual</Text>
                     </TouchableOpacity>
                   </View>
@@ -126,11 +143,19 @@ export function GameSetup({ gameType, onStart, onCancel }: GameSetupProps) {
         </View>
 
         <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+            <TouchableOpacity 
+                activeOpacity={0.7}
+                style={styles.cancelButton} 
+                onPress={onCancel}
+            >
                 <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+            <TouchableOpacity 
+                activeOpacity={0.9}
+                style={styles.startButton} 
+                onPress={handleStart}
+            >
                 <LinearGradient
                   colors={[colors.primary, colors.secondary] as [string, string]}
                   start={{ x: 0, y: 0 }}
@@ -138,6 +163,7 @@ export function GameSetup({ gameType, onStart, onCancel }: GameSetupProps) {
                   style={styles.startButtonGradient}
                 >
                     <Text style={styles.startButtonText}>Start Game</Text>
+                    <Zap color="white" size={20} style={{ marginLeft: 8 }} fill="white" />
                 </LinearGradient>
             </TouchableOpacity>
         </View>
@@ -167,23 +193,24 @@ function getHeatLabel(level: number) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 40 : 20,
+    paddingHorizontal: 24,
   },
   header: {
-    marginBottom: 30,
+    marginBottom: 40,
   },
   title: {
     fontFamily: 'Outfit',
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: '700',
     color: 'white',
-    marginBottom: 8,
+    marginBottom: 6,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontFamily: 'Quicksand',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.6)',
   },
   content: {
     flex: 1,
@@ -191,45 +218,77 @@ const styles = StyleSheet.create({
   gameCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 16,
-    borderRadius: 20,
-    marginBottom: 32,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: 20,
+    borderRadius: 24,
+    marginBottom: 40,
     gap: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   gameIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: {
+        width: 0,
+        height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  gameInfo: {
+    flex: 1,
   },
   gameTitle: {
     fontFamily: 'Outfit',
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: 'white',
     marginBottom: 4,
   },
   gameDescription: {
     fontFamily: 'Quicksand',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-    maxWidth: SCREEN_WIDTH - 120,
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: 20,
   },
   settingsContainer: {
-    gap: 24,
+    gap: 32,
   },
   settingSection: {
-    gap: 12,
+    gap: 16,
+  },
+  settingCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
   },
   sectionLabel: {
     fontFamily: 'Outfit',
     fontSize: 16,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.8)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.5,
+  },
+  sectionValue: {
+      fontFamily: 'Outfit',
+      fontSize: 14,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 1,
   },
   optionsRow: {
     flexDirection: 'row',
@@ -240,49 +299,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
-    borderRadius: 12,
+    paddingVertical: 18,
+    gap: 10,
+    borderRadius: 16,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   optionButtonSelected: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderColor: 'white',
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   optionText: {
     fontFamily: 'Outfit',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  optionTextSelected: {
-    color: 'white',
-    fontWeight: '600',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: Platform.OS === 'ios' ? 20 : 40,
+    marginTop: 20,
     gap: 16,
   },
   cancelButton: {
     paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   cancelText: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.5)',
     fontFamily: 'Outfit',
     fontSize: 16,
+    fontWeight: '500',
   },
   startButton: {
     flex: 1,
     height: 56,
     borderRadius: 28,
     overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: {
+        width: 0,
+        height: 6,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8.30,
+    elevation: 8,
   },
   startButtonGradient: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -291,5 +357,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Outfit',
     fontSize: 18,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

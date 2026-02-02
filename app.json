@@ -3,6 +3,12 @@
     "name": "Mistie",
     "slug": "mistie",
     "version": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/43723db9-164d-451f-af1d-5f302c5d21aa"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "mistie",

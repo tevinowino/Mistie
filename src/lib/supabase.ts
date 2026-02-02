@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import { AppState } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
@@ -15,12 +15,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Flag to track if initial session has been loaded
+let isInitialized = false;
+
+export const markSupabaseInitialized = () => {
+  isInitialized = true;
+};
+
 // Tells Supabase Auth to continuously refresh the session automatically
-// if the app is in the foreground. When this is added, you will continue
-// to receive `onAuthStateChange` events with the `TOKEN_REFRESHED` or
-// `SIGNED_OUT` event if the user's session is terminated. This should
-// only be registered once.
-AppState.addEventListener('change', (state) => {
+// if the app is in the foreground. We delay this until after initial
+// session check to prevent race conditions on cold start.
+AppState.addEventListener('change', (state: AppStateStatus) => {
+  // Only start auto-refresh after the app has initialized
+  if (!isInitialized) return;
+  
   if (state === 'active') {
     supabase.auth.startAutoRefresh();
   } else {

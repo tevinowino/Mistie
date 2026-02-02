@@ -1,4 +1,4 @@
-import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
+import NetInfo, { NetInfoState, NetInfoStateType } from '@react-native-community/netinfo';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface NetworkContextType {
@@ -17,7 +17,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [networkState, setNetworkState] = useState<NetInfoState>({
     isConnected: true,
     isInternetReachable: true,
-    type: 'unknown',
+    type: NetInfoStateType.unknown,
     details: null,
   });
 

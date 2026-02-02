@@ -1,3 +1,4 @@
+import { ActiveGameBanner } from '@/src/components/dashboard/ActiveGameBanner'; // [NEW]
 import { GameCard } from '@/src/components/dashboard/GameCard';
 import { RelationshipDurationCard } from '@/src/components/dashboard/RelationshipDurationCard';
 import { HarmonyRing } from '@/src/components/HarmonyRing';
@@ -12,6 +13,7 @@ import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
 import { useNetwork } from '@/src/context/NetworkContext';
 import { useTheme } from '@/src/context/ThemeContext';
+import { useActiveBondSession } from '@/src/hooks/useActiveBondSession'; // [NEW]
 import { useOnboardingStatus } from '@/src/hooks/useOnboardingStatus';
 import { supabase } from '@/src/lib/supabase';
 import { bondService } from '@/src/services/bondService';
@@ -22,16 +24,16 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import {
-  ArrowRight,
-  Check,
-  ChevronRight,
-  Droplets,
-  Flame,
-  Heart,
-  Link,
-  Sparkles,
-  WifiOff,
-  Zap,
+    ArrowRight,
+    Check,
+    ChevronRight,
+    Droplets,
+    Flame,
+    Heart,
+    Link,
+    Sparkles,
+    WifiOff,
+    Zap,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -53,10 +55,9 @@ const GAME_ICONS: Record<string, React.ReactNode> = {
   'hard-dare': <Zap color="white" size={24} />,
 };
 
-const {isConnected} = useNetwork();
-
 export default function Dashboard() {
   const { user } = useAuth();
+  const { isConnected } = useNetwork();
   const { isDark } = useTheme();
   const colors = isDark ? darkColors : lightColors;
   
@@ -79,6 +80,7 @@ export default function Dashboard() {
   const [showBondModal, setShowBondModal] = useState(false);
   const [showWalkthrough, setShowWalkthrough] = useState(false);
   const [hasAutoOpenedUnique, setHasAutoOpenedUnique] = useState(false);
+  const { activeSession } = useActiveBondSession(bond?.id); // [NEW]
 
   useEffect(() => {
     // Check if user has seen intro
@@ -325,6 +327,9 @@ export default function Dashboard() {
           <Text style={[styles.greeting, { color: colors.muted }]}>{getGreeting()},</Text>
           <Text style={[styles.userName, { color: colors.text }]}>{userName}</Text>
         </View>
+
+        {/* Active Game Banner */}
+        {activeSession && <ActiveGameBanner session={activeSession} />}
 
         {/* Relationship Duration (Calculated from Anniversary) */}
         {bond?.anniversary_date && (

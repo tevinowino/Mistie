@@ -1,3 +1,4 @@
+
 // import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -12,7 +13,7 @@
 //   body: string;
 //   data?: any;
 //   type: 'daily_dew' | 'nug' | 'game_invite' | 'bond_request' | 'system' | 'reminder';
-//   actorId?: string; // Optional: who triggered it
+//   actorId?: string; 
 // }
 
 // serve(async (req) => {
@@ -32,12 +33,15 @@
 //       throw new Error('No userIds provided');
 //     }
 
-//     // 1. Fetch Push Tokens
+//     // 1. Fetch Push Tokens (Only if notifications_enabled is TRUE)
+//     // We assume if the column is missing (legacy), it's true, but best to filter explicitly if it exists.
+//     // However, edge functions run against the live DB schema.
 //     const { data: profiles, error: profileError } = await supabase
 //       .from('profiles')
 //       .select('id, push_token')
 //       .in('id', userIds)
-//       .not('push_token', 'is', null);
+//       .not('push_token', 'is', null)
+//       .eq('notifications_enabled', true);  // Only send if enabled
 
 //     if (profileError) throw profileError;
 
@@ -47,11 +51,10 @@
 //       sound: 'default',
 //       title,
 //       body,
-//       data: { ...(data || {}), type } // Embed type in data for easier handling
+//       data: { ...(data || {}), type }
 //     })) || [];
 
 //     if (messages.length > 0) {
-//       // Setup chunks if needed (Expo handles batches of 100), for now assume <100
 //       await fetch('https://exp.host/--/api/v2/push/send', {
 //         method: 'POST',
 //         headers: {
@@ -61,12 +64,11 @@
 //         },
 //         body: JSON.stringify(messages),
 //       });
-//       // We don't block on waiting for Expo receipts here for speed
 //     }
 
 //     // 3. Log to Database (Notifications History)
-//     // We insert a row for EVERY recipient, regardless of whether they had a token
-//     // (So the in-app feed works even if push is disabled/missing)
+//     // ALWAYS insert into history, even if push is disabled.
+//     // The user might want to see them in the "Notifications" tab later.
 //     const notificationRows = userIds.map(uid => ({
 //       user_id: uid,
 //       actor_id: actorId || null,

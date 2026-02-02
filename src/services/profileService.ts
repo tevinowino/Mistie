@@ -7,6 +7,7 @@ export interface Profile {
   push_token?: string;
   birth_date?: string; // YYYY-MM-DD
   gender?: string;
+  notifications_enabled?: boolean;
   is_onboarding_complete: boolean;
   created_at: string;
 }

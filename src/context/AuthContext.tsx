@@ -32,12 +32,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // Timeout wrapper to prevent infinite hang
+    const sessionTimeout = setTimeout(() => {
+      console.warn('Session check timed out, proceeding without session');
       setIsLoading(false);
-    });
+    }, 5000); // 5 second timeout
+
+    // Check active session with error handling
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        clearTimeout(sessionTimeout);
+        setSession(session);
+        setUser(session?.user ?? null);
+        setIsLoading(false);
+        markSupabaseInitialized(); // Allow auto-refresh now
+      })
+      .catch((error) => {
+        clearTimeout(sessionTimeout);
+        console.error('Error getting session:', error);
+        setIsLoading(false);
+        markSupabaseInitialized(); // Allow auto-refresh even on error
+      });
 
     // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -46,7 +61,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(sessionTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithEmail = async (email: string) => {

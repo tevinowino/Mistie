@@ -12,7 +12,7 @@ import { colors } from '@/src/theme/colors';
 import { getGameBackgroundImage } from '@/src/utils/gameImages';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, RefreshCw, Wifi, WifiOff } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, RefreshCw, RotateCcw, Wifi, WifiOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
     Animated,
@@ -529,6 +529,48 @@ export default function GamePlay() {
             <RefreshCw color="white" size={20} />
             <Text style={styles.errorButtonText}>Generate Prompts</Text>
           </TouchableOpacity>
+        </View>
+      </ScreenWrapper>
+    );
+  }
+
+  // Deck Complete State
+  if (currentIndex >= effectivePrompts.length && effectivePrompts.length > 0) {
+    return (
+      <ScreenWrapper variant="dusk">
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+            <ArrowLeft color={colors.text} size={24} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.errorContainer, { gap: 24 }]}>
+          <View style={{ alignItems: 'center', gap: 12 }}>
+            <CheckCircle color="#22C55E" size={64} />
+            <Text style={[styles.errorText, { fontSize: 24, fontWeight: 'bold' }]}>Deck Complete!</Text>
+            <Text style={[styles.headerSubtitle, { fontSize: 16, textAlign: 'center', paddingHorizontal: 32 }]}>
+              You've gone through all the prompts in this set.
+            </Text>
+          </View>
+
+          <View style={{ gap: 12, width: '100%', paddingHorizontal: 32 }}>
+            <TouchableOpacity 
+              style={[styles.errorButton, { backgroundColor: colors.primary, width: '100%' }]} 
+              onPress={handleRefresh}
+            >
+              <RefreshCw color="white" size={20} />
+              <Text style={styles.errorButtonText}>Load New Questions</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.errorButton, { backgroundColor: 'rgba(255,255,255,0.1)', width: '100%' }]} 
+              onPress={goToPrevious}
+            >
+              <RotateCcw color={colors.text} size={20} />
+              <Text style={styles.errorButtonText}>Review Answers</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScreenWrapper>
     );

@@ -104,12 +104,14 @@ export function useGameSession({
   }, [bondId, gameTypeSlug, user]);
 
   const initializeSession = async () => {
+    console.log('🎮 [Game] initializeSession called', { bondId, gameTypeSlug, userId: user?.id });
     if (!user) return;
     
     setIsLoading(true);
     setError(null);
 
     try {
+      const startTime = Date.now();
       // Get bond data to know user positions
       const { data: bond } = await supabase
         .from('bonds')
@@ -122,10 +124,12 @@ export function useGameSession({
         setIsLoading(false);
         return;
       }
+      console.log('⏱️ [Game] Bond fetched in', Date.now() - startTime, 'ms');
       setBondData(bond);
 
       // Get game type
       const { data: gt } = await gameService.getGameTypeBySlug(gameTypeSlug);
+      console.log('⏱️ [Game] GameType fetched in', Date.now() - startTime, 'ms');
       if (!gt) {
         setError('Game not found');
         setIsLoading(false);
@@ -140,37 +144,55 @@ export function useGameSession({
 
       // Check for existing session
       const existingSession = await getExistingSession(bondId, effectiveGt);
+      console.log('⏱️ [Game] Existing session check in', Date.now() - startTime, 'ms, found:', !!existingSession);
       
       if (existingSession) {
+        console.log('🔄 [Game] Using existing session, setting up state...');
         await setupSessionState(existingSession, bond, user.id);
+        console.log('✅ [Game] Session state setup complete');
         setIsLoading(false);
         return;
       }
 
       // If no existing session, check if we need config
+      console.log('🆕 [Game] No existing session. Checking config requirements...');
+      console.log('🔧 [Game] has_spice_meter:', effectiveGt.has_spice_meter, 'has_virtual_mode:', effectiveGt.has_virtual_mode);
+      
       if (effectiveGt.has_spice_meter || effectiveGt.has_virtual_mode) {
+        console.log('⚙️ [Game] Config needed, showing setup screen');
         setConfigNeeded(true);
         setIsLoading(false);
         return;
       }
 
       // If no config needed, create default session
-      await startGame({ heatLevel: 1, mode: 'in_person' });
+      console.log('🚀 [Game] No config needed, starting game with defaults...');
+      await startGame({ heatLevel: 1, mode: 'in_person' }, effectiveGt);
+      console.log('✅ [Game] startGame completed');
       
     } catch (err) {
-      console.error('Error initializing session:', err);
+      console.error('❌ [Game] Error initializing session:', err);
       setError('Failed to initialize game session');
       setIsLoading(false);
     }
   };
 
-  const startGame = async (config: { heatLevel: number; mode: string }) => {
-    if (!gameType || !bondId || !user) return;
+  const startGame = async (config: { heatLevel: number; mode: string }, passedGameType?: GameType) => {
+    console.log('🎲 [Game] startGame called with config:', config);
+    
+    // Use passed gameType or fall back to state
+    const gt = passedGameType || gameType;
+    
+    if (!gt || !bondId || !user) {
+      console.log('❌ [Game] startGame aborted - missing:', { gameType: !!gt, bondId: !!bondId, user: !!user });
+      return;
+    }
     
     setIsLoading(true);
     setConfigNeeded(false);
 
     try {
+      console.log('🔍 [Game] Fetching bond for session creation...');
       const { data: bond } = await supabase
         .from('bonds')
         .select('id, user_1_id, user_2_id')
@@ -178,13 +200,19 @@ export function useGameSession({
         .single();
 
       if (!bond) throw new Error('Bond not found');
+      console.log('✅ [Game] Bond found');
 
-      const newSession = await createSession(bondId, gameType, config);
+      console.log('📝 [Game] Creating new session...');
+      const newSession = await createSession(bondId, gt, config);
+      console.log('✅ [Game] Session created:', newSession?.id);
+      
       if (newSession) {
+        console.log('⚙️ [Game] Setting up session state (this will load prompts)...');
         await setupSessionState(newSession, bond, user.id);
+        console.log('✅ [Game] Session state setup complete');
       }
     } catch (err) {
-      console.error('Error starting game:', err);
+      console.error('❌ [Game] Error starting game:', err);
       setError('Failed to start game');
     } finally {
       setIsLoading(false);
@@ -194,16 +222,33 @@ export function useGameSession({
   const updateSessionConfig = async (config: { heatLevel?: number; mode?: string }) => {
     if (!session) return;
 
-    // Optimistic update
+    // 1. Instant Optimistic UI Update
     const updatedSession = { 
       ...session, 
       heat_level: config.heatLevel ?? session.heat_level, 
       mode: config.mode ?? session.mode 
     };
     setSession(updatedSession);
+    
+    // 2. Trigger loading immediately (don't wait for DB)
+    const heatChanged = config.heatLevel && config.heatLevel !== session.heat_level;
+    const modeChanged = config.mode && config.mode !== session.mode;
+
+    if (heatChanged || modeChanged) {
+        setIsLoading(true);
+        // Fire and forget the prompt load so UI shows loading state immediately
+        // We act as if the config is already applied
+        loadPrompts(bondId, session.game_type_id, { 
+          heatLevel: updatedSession.heat_level, 
+          mode: updatedSession.mode,
+          // If mode/heat changes, we likely need new prompts. 
+          // If we just filtering existing ones, that's fast. 
+          // If none exist, loadPrompts will generate.
+        }).then(() => setIsLoading(false));
+    }
 
     try {
-      // Update DB
+      // 3. Persist to DB in background
       const { error } = await supabase
         .from('game_sessions')
         .update({
@@ -214,15 +259,6 @@ export function useGameSession({
 
       if (error) throw error;
 
-      // Reload prompts if heat level changed
-      if (config.heatLevel && config.heatLevel !== session.heat_level) {
-        setIsLoading(true);
-        await loadPrompts(bondId, session.game_type_id, { 
-          heatLevel: config.heatLevel, 
-          mode: updatedSession.mode 
-        });
-        setIsLoading(false);
-      }
     } catch (err) {
       console.error('Error updating session config:', err);
       // Revert on error? For now just log
@@ -298,17 +334,22 @@ export function useGameSession({
     subscribeToPresence(sess.id);
 
     // Load prompts using session config
+    // On initial setup, only generate if pool is empty (handled by loadPrompts logic)
     await loadPrompts(bondId, sess.game_type_id, { 
       heatLevel: sess.heat_level, 
-      mode: sess.mode 
+      mode: sess.mode,
+      // forceRegenerate: false // Default to false to preserve session state
     }); 
   };
 
   const loadPrompts = async (
     bondId: string, 
     gtId: string, 
-    options?: { heatLevel?: number; mode?: string }
+    options?: { heatLevel?: number; mode?: string; forceRegenerate?: boolean }
   ) => {
+    const promptStart = Date.now();
+    console.log('📦 [Game] loadPrompts called', { bondId, gtId, options });
+    
     // Try to get existing prompts
     const { data: existingPrompts } = await gameService.getPromptsForGame(
       bondId,
@@ -316,16 +357,68 @@ export function useGameSession({
       { limit: 50, heatLevel: options?.heatLevel, mode: options?.mode }
     );
 
-    if (existingPrompts && existingPrompts.length >= 10) {
+    console.log('📦 [Game] Existing prompts found:', existingPrompts?.length || 0, 'in', Date.now() - promptStart, 'ms');
+    
+    if (existingPrompts && existingPrompts.length > 0) {
+      console.log('✅ [Game] Using existing prompts, no regeneration - TOTAL:', Date.now() - promptStart, 'ms');
       setPrompts(existingPrompts);
-    } else {
-      // Generate new prompts
+      
+      // If forceRegenerate is explicitly requested, we MUST regenerate regardless of pool size
+      if (options?.forceRegenerate) {
+        console.log('🔄 [Game] forceRegenerate requested, cycling prompts...');
+        setIsGenerating(true);
+        
+        // Mark current prompts as used
+        await gameService.markPromptsAsUsed(bondId, gtId);
+        
+        // Generate new ones
+        await gameService.generatePrompts(
+          bondId, 
+          gameTypeSlug, 
+          { 
+            heatLevel: options?.heatLevel, 
+            mode: options?.mode,
+            count: 30 
+          }
+        );
+        
+        // Reset session index to 0 so both users start at the beginning
+        if (session?.id) {
+          console.log('🔄 [Game] Resetting session index to 0...');
+          await supabase
+            .from('game_sessions')
+            .update({ current_prompt_index: 0 })
+            .eq('id', session.id);
+        }
+        
+        // Fetch the new batch
+        const { data: newPrompts } = await gameService.getPromptsForGame(
+          bondId, 
+          gtId, 
+          { limit: 50, heatLevel: options?.heatLevel, mode: options?.mode }
+        );
+        if (newPrompts) {
+          setPrompts(newPrompts);
+        }
+        setIsGenerating(false);
+      }
+    } else if (options?.forceRegenerate || existingPrompts?.length === 0) {
+      // Only generate if no prompts exist (and we didn't just handle forceRegenerate above)
+      // Note: If forceRegenerate was true, we would have entered the first block if prompts existed.
+      // So here means prompts=0.
+      console.log('🆕 [Game] No prompts found, generating new prompts via AI...');
+      console.log('⏳ [Game] AI generation starting at', Date.now() - promptStart, 'ms');
       setIsGenerating(true);
       const { error: genError } = await gameService.generatePrompts(
         bondId, 
         gameTypeSlug, 
-        { heatLevel: options?.heatLevel, mode: options?.mode }
+        { 
+          heatLevel: options?.heatLevel, 
+          mode: options?.mode,
+          count: 30
+        }
       );
+      console.log('⏳ [Game] AI generation finished at', Date.now() - promptStart, 'ms');
       
       if (!genError) {
         const { data: newPrompts } = await gameService.getPromptsForGame(
@@ -357,12 +450,20 @@ export function useGameSession({
           const newData = payload.new as GameSession;
           const oldData = payload.old as GameSession;
           
+          console.log('📡 [Game] Real-time update received', { 
+            newIndex: newData.current_prompt_index,
+            oldIndex: oldData?.current_prompt_index,
+            heatChanged: oldData?.heat_level !== undefined && newData.heat_level !== oldData.heat_level,
+            modeChanged: oldData?.mode !== undefined && newData.mode !== oldData.mode
+          });
+          
           // Check for config changes that require prompt reload
-          if (
-            newData.heat_level !== oldData.heat_level || 
-            newData.mode !== oldData.mode
-          ) {
-            console.log('Game config changed remotely, reloading prompts...');
+          // IMPORTANT: Only trigger if oldData values exist (not first sync)
+          const heatChanged = oldData?.heat_level !== undefined && newData.heat_level !== oldData.heat_level;
+          const modeChanged = oldData?.mode !== undefined && newData.mode !== oldData.mode;
+          
+          if (heatChanged || modeChanged) {
+            console.log('🔥 [Game] Config changed remotely, reloading prompts...');
             await loadPrompts(bondId, newData.game_type_id, {
               heatLevel: newData.heat_level,
               mode: newData.mode
@@ -370,6 +471,7 @@ export function useGameSession({
           }
 
           // Update current index (this is the key sync!)
+          console.log('📍 [Game] Syncing index to:', newData.current_prompt_index || 0);
           setCurrentIndex(newData.current_prompt_index || 0);
           setSession(newData);
           
@@ -447,9 +549,12 @@ export function useGameSession({
 
   // Navigate to next card - synced!
   const goToNext = useCallback(async () => {
+    console.log('➡️ [Game] goToNext called', { currentIndex, promptsLength: prompts.length });
     if (!session) return;
     
-    const newIndex = currentIndex < prompts.length - 1 ? currentIndex + 1 : 0;
+    // Allow index to go one past the end to show "Deck Complete" screen
+    const newIndex = currentIndex + 1;
+    console.log('➡️ [Game] Moving to index:', newIndex, 'Deck size:', prompts.length);
     
     // Update in database - this will trigger real-time sync
     // Also reset spin state for the new card
@@ -482,9 +587,11 @@ export function useGameSession({
 
   // Navigate to previous card - synced!
   const goToPrevious = useCallback(async () => {
+    console.log('⬅️ [Game] goToPrevious called', { currentIndex });
     if (!session || currentIndex <= 0) return;
     
     const newIndex = currentIndex - 1;
+    console.log('⬅️ [Game] Moving to index:', newIndex);
     
     const { error } = await supabase
       .from('game_sessions')
@@ -538,10 +645,9 @@ export function useGameSession({
     }
   }, [session, isUser1]);
 
-  // Refresh prompts
-  // Refresh prompts
+  // Refresh prompts - explicitly regenerate
   const refreshPrompts = useCallback(async () => {
-    if (!bondId || !gameTypeId) return;
+    if (!bondId || !gameType) return;
     
     // Broadcast to partner that we are refreshing
     if (channelRef.current) {
@@ -552,14 +658,16 @@ export function useGameSession({
       });
     }
 
-    setIsGenerating(true);
     const currentHeat = session?.heat_level;
     const currentMode = session?.mode;
 
-    await gameService.generatePrompts(bondId, gameTypeSlug, { heatLevel: currentHeat, mode: currentMode });
-    await loadPrompts(bondId, gameTypeId, { heatLevel: currentHeat, mode: currentMode });
-    setIsGenerating(false);
-  }, [bondId, gameTypeId, gameTypeSlug, session]);
+    // Force regeneration with the flag
+    await loadPrompts(bondId, gameType.id, { 
+      heatLevel: currentHeat, 
+      mode: currentMode,
+      forceRegenerate: true  // Explicitly request regeneration
+    });
+  }, [bondId, gameType, session]);
 
   // End session
   const endSession = useCallback(async () => {

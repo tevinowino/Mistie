@@ -52,7 +52,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="link" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="profile/index" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="index" options={{ headerShown: false }} />
       </Stack>
     </View>
@@ -67,7 +67,7 @@ import * as SplashScreen from 'expo-splash-screen';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     'DancingScript': DancingScript_400Regular,
     'Outfit': Outfit_400Regular,
     'Outfit-Bold': Outfit_700Bold,
@@ -78,12 +78,13 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) {
+  // Proceed even if fonts failed - better than blank screen
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 

@@ -114,7 +114,7 @@ class GameService {
       .eq('is_used', false);
 
     if (options?.heatLevel) {
-      query = query.eq('heat_level', options.heatLevel);
+      query = query.lte('heat_level', options.heatLevel);
     }
     if (options?.mode && options.mode !== 'both') {
       query = query.or(`mode.eq.${options.mode},mode.eq.both`);
@@ -170,6 +170,7 @@ class GameService {
     options?: {
       heatLevel?: number;
       mode?: string;
+      count?: number;
     }
   ) {
     try {
@@ -182,6 +183,7 @@ class GameService {
         game_type_slug: gameTypeSlug,
         heat_level: options?.heatLevel || 2,
         mode: options?.mode || 'in_person',
+        count: options?.count || 30,
       };
       
       console.log('📤 [generatePrompts] Request Body:', JSON.stringify(requestBody, null, 2));
@@ -206,12 +208,56 @@ class GameService {
       }
 
       const data = await response.json();
-      console.log('📥 [generatePrompts] Response:', JSON.stringify(data, null, 2));
+      console.log('📥 [generatePrompts] Response received. Count:', data.prompts?.length || 0);
+
+      // Save generated prompts to bond_game_prompts for persistence
+      if (data.prompts && data.prompts.length > 0) {
+        console.log('💾 [generatePrompts] Saving prompts to persistent bond queue...');
+        
+        // Map global prompts to bond-specific format
+        const bondPrompts = data.prompts.map((p: any) => ({
+          bond_id: bondId,
+          game_type_id: p.game_type_id, 
+          prompt_text: p.prompt_text,
+          option_a: p.option_a,
+          option_b: p.option_b,
+          mode: p.mode,
+          heat_level: p.heat_level,
+          is_used: false
+        }));
+
+        const { error: saveError } = await supabase
+          .from('bond_game_prompts')
+          .insert(bondPrompts);
+
+        if (saveError) {
+          console.error('❌ [generatePrompts] Failed to save prompts persistence:', saveError);
+        } else {
+          console.log('✅ [generatePrompts] Successfully saved prompts to bond queue');
+        }
+      }
+
       return { data, error: null };
     } catch (error) {
       console.error('generatePrompts error:', error);
       return { data: null, error };
     }
+  }
+
+  async markPromptsAsUsed(bondId: string, gameTypeId: string) {
+    const { error } = await supabase
+      .from('bond_game_prompts')
+      .update({ is_used: true })
+      .eq('bond_id', bondId)
+      .eq('game_type_id', gameTypeId)
+      .eq('is_used', false);
+      
+    if (error) {
+      console.error('❌ [markPromptsAsUsed] Failed to mark prompts used:', error);
+    } else {
+      console.log('✅ [markPromptsAsUsed] Marked current prompts as used');
+    }
+    return { error };
   }
 
   // ==========================================
@@ -265,6 +311,19 @@ class GameService {
       .single();
 
     return { data: data as GameSession | null, error };
+  }
+
+  async getActiveSessionForBond(bondId: string) {
+    const { data, error } = await supabase
+      .from('game_sessions')
+      .select('*, game_types(*)') // Join to get game details
+      .eq('bond_id', bondId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    return { data: data as GameSession & { game_types: GameType } | null, error };
   }
 
   async updateSessionIndex(sessionId: string, newIndex: number) {

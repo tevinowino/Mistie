@@ -10,7 +10,7 @@ import { darkColors, lightColors } from '@/src/theme/colors';
 import { router } from 'expo-router';
 import { AlertTriangle, ArrowLeft, Bell, Check, ChevronRight, Heart, LogOut, Moon, Save, Smartphone, Sun, User, WifiOff } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -44,6 +44,9 @@ export default function ProfileScreen() {
   const [annMonth, setAnnMonth] = useState('');
   const [annYear, setAnnYear] = useState('');
 
+  // Settings
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
   useEffect(() => {
     if (user && isConnected) {
        loadData();
@@ -62,6 +65,7 @@ export default function ProfileScreen() {
       if (profile) {
         setName(profile.display_name || '');
         setGender(profile.gender || '');
+        setNotificationsEnabled(profile.notifications_enabled ?? true);
         if (profile.birth_date) {
           const [y, m, d] = profile.birth_date.split('-');
           setDobYear(y);
@@ -399,22 +403,46 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.menuButton, { 
+        <View style={[styles.menuContainer, { 
             backgroundColor: colors.card, 
             borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', 
-            borderWidth: 1,
-            opacity: isConnected ? 1 : 0.6
-          }]}
-          onPress={() => isConnected && router.push('/notifications' as any)}
-          disabled={!isConnected}
-        >
-          <View style={[styles.menuIconContainer, { backgroundColor: isDark ? 'rgba(255, 107, 148, 0.1)' : '#FFF0F3' }]}>
-             <Bell size={20} color={colors.primary} />
-          </View>
-          <Text style={[styles.menuLabel, { color: colors.text }]}>Notifications</Text>
-          <ChevronRight size={20} color={colors.muted} />
-        </TouchableOpacity>
+            borderWidth: 1 
+          }]}>
+            {/* Notification Toggle */}
+            <View style={[styles.menuItem, { borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }]}>
+               <View style={[styles.menuIconContainer, { backgroundColor: isDark ? 'rgba(255, 184, 0, 0.1)' : '#FFFBE6' }]}>
+                  <Bell size={20} color={isDark ? '#FFB800' : '#F59E0B'} />
+               </View>
+               <Text style={[styles.menuLabel, { color: colors.text }]}>Push Notifications</Text>
+               <Switch
+                  trackColor={{ false: isDark ? '#333' : '#E0E0E0', true: colors.primary }}
+                  thumbColor={'white'}
+                  ios_backgroundColor={isDark ? '#333' : '#E0E0E0'}
+                  onValueChange={(val) => {
+                     setNotificationsEnabled(val);
+                     // Auto-save preference immediately
+                     if (isConnected) {
+                       profileService.updateProfile(user!.id, { notifications_enabled: val });
+                     }
+                  }}
+                  value={notificationsEnabled}
+                  disabled={!isConnected}
+               />
+            </View>
+
+            {/* Notification History Link */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => isConnected && router.push('/notifications' as any)}
+              disabled={!isConnected}
+            >
+              <View style={[styles.menuIconContainer, { backgroundColor: isDark ? 'rgba(59, 130, 246, 0.1)' : '#EFF6FF' }]}>
+                 <Smartphone size={20} color="#3B82F6" />
+              </View>
+              <Text style={[styles.menuLabel, { color: colors.text }]}>Notification History</Text>
+              <ChevronRight size={20} color={colors.muted} />
+            </TouchableOpacity>
+        </View>
 
         {/* SAVE BUTTON */}
         <TouchableOpacity 
@@ -659,12 +687,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
-  menuButton: {
+  menuContainer: {
+    borderRadius: 16,
+    marginBottom: 32,
+    overflow: 'hidden',
+  },
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 16,
-    marginBottom: 32,
     gap: 12,
   },
   menuIconContainer: {

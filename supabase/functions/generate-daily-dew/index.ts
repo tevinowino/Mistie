@@ -1,80 +1,29 @@
-// // Follow this setup guide to integrate the Deno language server with your editor:
-// // https://deno.land/manual/getting_started/setup_your_environment
-// // This enables autocomplete, go to definition, etc.
-
 // import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+// const corsHeaders = {
+//   'Access-Control-Allow-Origin': '*',
+//   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// };
 
-// // Helper to calculate age from birthdate
-// const getAge = (birthDate: string) => {
-//   if (!birthDate) return 18; // Default
-//   const diff = Date.now() - new Date(birthDate).getTime();
-//   return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-// }
+// // Fallback questions if pool is completely empty
+// const FALLBACK_QUESTIONS = [
+//   "What is one thing you hope to discover about each other today?",
+//   "What made you smile thinking about us this week?",
+//   "If we could relive one day together, which would you choose?",
+//   "What's something small I did recently that meant a lot to you?",
+//   "What adventure should we plan for our next free day?",
+// ];
 
-// // --------------------------------------------------------------------------------
-// // HELPER: Generate Dews via AI (returns array of strings)
-// // --------------------------------------------------------------------------------
-// async function generateFreshDews(apiKey: string, count: number, dynamic: string, anchors: string) {
-//   const systemPrompt = `
-// Generate exactly ${count} unique, intimate, thought-provoking questions for a couple to answer daily.
-
-// Context:
-// - Relationship Dynamic: ${dynamic || 'General Couple'}
-// - Relationship Anchors/History: ${anchors || 'None provided'}
-// - Purpose: Build connection, understanding, and intimacy.
-
-// Constraints:
-// - Maximum 15-20 words per question.
-// - No introductory text. No numbering.
-// - Output ONLY a JSON array of strings.
-// - Example: ["What is one thing I do that makes you feel safe?", "What is your favorite memory of us from last month?"]
-// `;
-
-//   const response = await fetch(GEMINI_API_URL, {
-//     method: 'POST',
-//     headers: { 
-//       'Content-Type': 'application/json',
-//       'x-goog-api-key': apiKey
-//     },
-//     body: JSON.stringify({
-//       contents: [{ parts: [{ text: systemPrompt }] }],
-//       generationConfig: { temperature: 0.8 }
-//     })
-//   });
-
-//   if (!response.ok) {
-//     const txt = await response.text();
-//     console.error(`AI Error (${response.status}):`, txt);
-//     return [];
-//   }
-
-//   const data = await response.json();
-//   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  
+// /**
+//  * Process a single bond: assign today's dew from the pool
+//  */
+// async function processBond(
+//   supabase: ReturnType<typeof createClient>,
+//   bondId: string,
+//   today: string
+// ): Promise<{ bondId: string; success: boolean; question?: string; error?: string }> {
 //   try {
-//     const jsonMatch = text.match(/\[[\s\S]*\]/);
-//     if (jsonMatch) {
-//       return JSON.parse(jsonMatch[0]); // Returns string[]
-//     } else {
-//       console.warn("AI didn't return JSON array:", text);
-//       return [];
-//     }
-//   } catch (e) {
-//     console.error("Failed to parse AI response", e);
-//     return [];
-//   }
-// }
-
-// // --------------------------------------------------------------------------------
-// // MAIN LOGIC: Process Single Bond
-// // --------------------------------------------------------------------------------
-// async function processBond(supabase: any, bondId: string, apiKey: string) {
-//   try {
-//     const today = new Date().toISOString().split('T')[0];
-
-//     // 1. Check if Dew exists for today
+//     // 1. Check if dew already exists for today
 //     const { data: existingDew } = await supabase
 //       .from('daily_dews')
 //       .select('id, question_text')
@@ -83,147 +32,99 @@
 //       .maybeSingle();
 
 //     if (existingDew) {
-//       return { bondId, success: true, message: 'Already exists', question: existingDew.question_text };
+//       return { 
+//         bondId, 
+//         success: true, 
+//         question: existingDew.question_text,
+//       };
 //     }
 
-//     // 2. Fetch Bond Context
-//     const { data: bond } = await supabase
-//       .from('bonds')
-//       .select(`
-//         id, dynamic, 
-//         user1:user_1_id(birth_date),
-//         user2:user_2_id(birth_date)
-//       `)
-//       .eq('id', bondId)
-//       .single();
-
-//     if (!bond) throw new Error('Bond not found');
-
-//     const age1 = bond.user1?.birth_date ? getAge(bond.user1.birth_date) : 18;
-//     const age2 = bond.user2?.birth_date ? getAge(bond.user2.birth_date) : 18;
-//     const minCoupleAge = Math.min(age1, age2);
-
-//     // Fetch Anchors (optional context)
-//     const { data: anchorsData } = await supabase
-//       .from('relationship_anchors')
-//       .select('key, value')
-//       .eq('bond_id', bondId);
-    
-//     const anchorText = anchorsData?.map((a: any) => `${a.key}: ${a.value}`).join(', ') || "";
-
-//     // 3. Get Seen History (to exclude)
+//     // 2. Get prompts this bond has already seen
 //     const { data: seenData } = await supabase
 //       .from('bond_seen_prompts')
 //       .select('prompt_id')
 //       .eq('bond_id', bondId)
 //       .eq('type', 'dew');
-    
-//     const seenIds = seenData?.map((s: any) => s.prompt_id) || [];
 
-//     // 4. Query Global Pool
-//     // For Dews, we want broadly applicable or dynamic-specific
+//     const seenIds = seenData?.map((s) => s.prompt_id) || [];
+
+//     // 3. Query pool for unseen prompts
 //     let query = supabase
 //       .from('daily_dew_prompts')
 //       .select('id, question_text')
-//       .lte('min_age', minCoupleAge); // Ensure age appropriate
+//       .order('created_at', { ascending: true }) // Oldest first (FIFO)
+//       .limit(10);
 
-//     // Filter by Dynamic (if column allows array containment, or just generic search)
-//     // Assuming schema: dynamic text[]
-//     if (bond.dynamic) {
-//       // Logic: Get prompts that are either generic (dynamic IS NULL or empty) OR match our dynamic
-//       // Supabase strict filtering might be tricky with OR on array columns. 
-//       // Simplified: Just get generally available ones. 
-//       // OR better: Post-filter or use a simpler query. 
-//       // Let's rely on random selection from the pool.
-//     }
-
+//     // Exclude seen prompts
 //     if (seenIds.length > 0) {
 //       query = query.not('id', 'in', `(${seenIds.join(',')})`);
 //     }
 
-//     // Fetch batch
-//     const { data: candidates } = await query.limit(10); // Get 10 candidates
-//     let selectionCandidate = null;
+//     const { data: candidates, error: queryError } = await query;
 
-//     // 5. If Not Enough Candidates -> Generate with AI
-//     if (!candidates || candidates.length < 3) {
-//       console.log(`[${bondId}] Pool low (${candidates?.length ?? 0}). Calls AI...`);
-//       const newQuestions = await generateFreshDews(apiKey, 5, bond.dynamic, anchorText);
-      
-//       // Save to Global Pool
-//       for (const qText of newQuestions) {
-//         // Insert with 'dynamic' tag
-//         const { data: saved, error } = await supabase
-//           .from('daily_dew_prompts')
-//           .insert({
-//             question_text: qText,
-//             dynamic: bond.dynamic ? [bond.dynamic] : [],
-//             min_age: 0 // Default to safe
-//           })
-//           .select()
-//           .single();
-        
-//         if (saved && !selectionCandidate) {
-//           selectionCandidate = saved; // Pick the first new one as our winner
-//         }
-//       }
-//     } 
-    
-//     // If we didn't generate new ones (or failed to), pick from candidates
-//     if (!selectionCandidate && candidates && candidates.length > 0) {
-//       // Random pick
-//       selectionCandidate = candidates[Math.floor(Math.random() * candidates.length)];
+//     if (queryError) {
+//       console.error(`[${bondId}] Query error:`, queryError);
+//       throw queryError;
 //     }
 
-//     // 6. Final Fallback (Simulate simple question if everything fails)
-//     if (!selectionCandidate) {
-//       selectionCandidate = { 
-//         id: null, 
-//         question_text: "What is one thing you are grateful for today?" 
-//       };
+//     let selectedPrompt: { id: string | null; question_text: string };
+
+//     if (candidates && candidates.length > 0) {
+//       // Random selection from available candidates
+//       selectedPrompt = candidates[Math.floor(Math.random() * candidates.length)];
+//     } else {
+//       // Pool exhausted for this couple - use fallback
+//       console.warn(`[${bondId}] Pool exhausted, using fallback`);
+//       const fallbackQuestion = FALLBACK_QUESTIONS[
+//         Math.floor(Math.random() * FALLBACK_QUESTIONS.length)
+//       ];
+//       selectedPrompt = { id: null, question_text: fallbackQuestion };
 //     }
 
-//     // 7. Schedule Dew (Insert into daily_dews)
-//     const { error: dewError } = await supabase
+//     // 4. Insert today's dew
+//     const { error: insertError } = await supabase
 //       .from('daily_dews')
 //       .insert({
 //         bond_id: bondId,
-//         question_text: selectionCandidate.question_text,
+//         question_text: selectedPrompt.question_text,
 //         scheduled_for: today,
-//         is_revealed: false
+//         is_revealed: false,
 //       });
 
-//     if (dewError) throw dewError;
+//     if (insertError) {
+//       console.error(`[${bondId}] Insert error:`, insertError);
+//       throw insertError;
+//     }
 
-//     // 8. Mark as Seen (if it came from the global pool with an ID)
-//     if (selectionCandidate.id) {
+//     // 5. Mark prompt as seen (if from pool)
+//     if (selectedPrompt.id) {
 //       await supabase.from('bond_seen_prompts').insert({
 //         bond_id: bondId,
-//         prompt_id: selectionCandidate.id,
-//         type: 'dew'
+//         prompt_id: selectedPrompt.id,
+//         type: 'dew',
 //       });
 //     }
 
-//     return { bondId, success: true, question: selectionCandidate.question_text };
+//     return { 
+//       bondId, 
+//       success: true, 
+//       question: selectedPrompt.question_text 
+//     };
 
-//   } catch (err: any) {
-//     console.error(`Error processing bond ${bondId}:`, err);
-//     return { bondId, success: false, error: err.message };
+//   } catch (error: unknown) {
+//     const message = error instanceof Error ? error.message : 'Unknown error';
+//     console.error(`[${bondId}] Error:`, message);
+//     return { bondId, success: false, error: message };
 //   }
 // }
 
-// // --------------------------------------------------------------------------------
-// // SERVER ENTRYPOINT
-// // --------------------------------------------------------------------------------
+// // ============================================================================
+// // MAIN HANDLER
+// // ============================================================================
 // Deno.serve(async (req) => {
+//   // Handle CORS preflight
 //   if (req.method === 'OPTIONS') {
-//     return new Response('ok', { 
-//       headers: {
-//         'Access-Control-Allow-Origin': '*',
-//         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-//         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-//       }
-//     });
+//     return new Response('ok', { headers: corsHeaders });
 //   }
 
 //   try {
@@ -231,48 +132,90 @@
 //       Deno.env.get('SUPABASE_URL') ?? '',
 //       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 //     );
-//     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-//     if (!GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-//     let bond_id;
+//     // Get today's date in UTC
+//     const today = new Date().toISOString().split('T')[0];
+//     console.log(`[GenerateDailyDew] Running for date: ${today}`);
+
+//     // Parse optional bond_id for single-bond mode
+//     let singleBondId: string | null = null;
 //     try {
 //       const body = await req.json();
-//       bond_id = body.bond_id;
+//       if (body.bond_id) {
+//         singleBondId = body.bond_id;
+//       }
 //     } catch {
 //       // Body might be empty
 //     }
 
-//     const results = [];
+//     const results: Array<{ bondId: string; success: boolean; question?: string; error?: string }> = [];
 
-//     if (bond_id) {
-//       // Single Mode
-//       const result = await processBond(supabase, bond_id, GEMINI_API_KEY);
+//     if (singleBondId) {
+//       // Single bond mode (triggered from app)
+//       console.log(`[GenerateDailyDew] Single bond mode: ${singleBondId}`);
+//       const result = await processBond(supabase, singleBondId, today);
 //       results.push(result);
 //     } else {
-//       // Batch Mode: Fetch active couples
-//       // TODO: Pagination for large datasets
+//       // Batch mode (triggered by cron)
+//       console.log('[GenerateDailyDew] Batch mode: processing all active bonds');
+
+//       // Get all active coupled bonds
 //       const { data: bonds, error: bondsError } = await supabase
 //         .from('bonds')
 //         .select('id')
 //         .eq('is_active', true)
-//         .neq('status', 'pending'); 
+//         .eq('status', 'couple');
 
 //       if (bondsError) throw bondsError;
-//       if (bonds) {
-//         // Parallel processing (limit concurrency in production!)
-//         const batchResults = await Promise.all(bonds.map((b: any) => processBond(supabase, b.id, GEMINI_API_KEY)));
+
+//       if (!bonds || bonds.length === 0) {
+//         console.log('[GenerateDailyDew] No active bonds found');
+//         return new Response(
+//           JSON.stringify({ success: true, message: 'No active bonds', results: [] }),
+//           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+//         );
+//       }
+
+//       console.log(`[GenerateDailyDew] Processing ${bonds.length} bonds`);
+
+//       // Process bonds in parallel (with concurrency limit)
+//       const BATCH_SIZE = 10;
+//       for (let i = 0; i < bonds.length; i += BATCH_SIZE) {
+//         const batch = bonds.slice(i, i + BATCH_SIZE);
+//         const batchResults = await Promise.all(
+//           batch.map((bond) => processBond(supabase, bond.id, today))
+//         );
 //         results.push(...batchResults);
 //       }
 //     }
 
-//     return new Response(JSON.stringify({ success: true, results }), {
-//       headers: { 'Content-Type': 'application/json' },
-//     });
+//     const successCount = results.filter((r) => r.success).length;
+//     const failCount = results.filter((r) => !r.success).length;
 
-//   } catch (error: any) {
-//     return new Response(JSON.stringify({ error: error.message }), {
-//       status: 400,
-//       headers: { 'Content-Type': 'application/json' },
-//     });
+//     console.log(`[GenerateDailyDew] Complete. Success: ${successCount}, Failed: ${failCount}`);
+
+//     return new Response(
+//       JSON.stringify({
+//         success: true,
+//         date: today,
+//         processed: results.length,
+//         successful: successCount,
+//         failed: failCount,
+//         results,
+//       }),
+//       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+//     );
+
+//   } catch (error: unknown) {
+//     const message = error instanceof Error ? error.message : 'Unknown error';
+//     console.error('[GenerateDailyDew] Fatal error:', message);
+
+//     return new Response(
+//       JSON.stringify({ success: false, error: message }),
+//       { 
+//         status: 500, 
+//         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+//       }
+//     );
 //   }
 // });
