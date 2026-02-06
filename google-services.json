@@ -1,0 +1,29 @@
+{
+    "project_info": {
+        "project_number": "1029151124554",
+        "project_id": "studio-1720864676-34b16",
+        "storage_bucket": "studio-1720864676-34b16.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:1029151124554:android:1e32cca31f1705386d8ab3",
+                "android_client_info": {
+                    "package_name": "com.mistie.app"
+                }
+            },
+            "oauth_client": [],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyDdEK83YDQinjYDW2tX1raQF7wCaNg--9g"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": []
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

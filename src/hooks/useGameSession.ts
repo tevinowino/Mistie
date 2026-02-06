@@ -236,14 +236,15 @@ export function useGameSession({
 
     if (heatChanged || modeChanged) {
         setIsLoading(true);
-        // Fire and forget the prompt load so UI shows loading state immediately
-        // We act as if the config is already applied
+        // Force reload logic (Host should generate/fetch, Guest should wait)
+        // For optimisic UI, we can clear prompts or show loading
+        setPrompts([]); 
+        
+        // If I am the one updating, I should probably drive the update
         loadPrompts(bondId, session.game_type_id, { 
           heatLevel: updatedSession.heat_level, 
           mode: updatedSession.mode,
-          // If mode/heat changes, we likely need new prompts. 
-          // If we just filtering existing ones, that's fast. 
-          // If none exist, loadPrompts will generate.
+          forceRegenerate: true // Treat config change as a need to refresh
         }).then(() => setIsLoading(false));
     }
 
@@ -295,7 +296,7 @@ export function useGameSession({
         user_1_response: null,
         user_2_response: null,
         is_active: true,
-        prompts: [],
+        prompts: [], // Initialize empty, loadPrompts will fill it
       })
       .select()
       .single();
@@ -331,15 +332,18 @@ export function useGameSession({
     subscribeToSession(sess.id, isU1);
     subscribeToPresence(sess.id);
 
-    subscribeToPresence(sess.id);
-
-    // Load prompts using session config
-    // On initial setup, only generate if pool is empty (handled by loadPrompts logic)
-    await loadPrompts(bondId, sess.game_type_id, { 
-      heatLevel: sess.heat_level, 
-      mode: sess.mode,
-      // forceRegenerate: false // Default to false to preserve session state
-    }); 
+    // Initial Load - Check session prompts first
+    if (sess.prompts && sess.prompts.length > 0) {
+        // @ts-ignore - Supabase types are weird vs our manually defined ones
+        setPrompts(sess.prompts as GamePrompt[]);
+        setIsLoading(false);
+    } else {
+        // If empty, trigger load/generation
+        await loadPrompts(bondId, sess.game_type_id, { 
+            heatLevel: sess.heat_level, 
+            mode: sess.mode,
+        }); 
+    }
   };
 
   const loadPrompts = async (
@@ -348,9 +352,29 @@ export function useGameSession({
     options?: { heatLevel?: number; mode?: string; forceRegenerate?: boolean }
   ) => {
     const promptStart = Date.now();
-    console.log('📦 [Game] loadPrompts called', { bondId, gtId, options });
+    console.log('📦 [Game] loadPrompts called', { bondId, gtId, options, isUser1 });
+
+    // Race Condition Fix:
+    // 1. If we are NOT User 1, and we are not forcing a refresh manually, 
+    //    we should wait for the session to be updated by User 1.
+    //    BUT, if prompts are empty and we are alone or partner is offline, we might need to take charge.
+    //    For now, we enforce User 1 as the generator if connected.
     
-    // Try to get existing prompts
+    const shouldGenerate = isUser1 || options?.forceRegenerate;
+    
+    if (!shouldGenerate) {
+       // If I am User 2, and I see no prompts, I will wait for the realtime update.
+       // However, checking bond_game_prompts as a backup is okay, 
+       // but we should PREFER session.prompts to ensure sync.
+       
+       // If there are existing prompts in `session` (passed in props or state), use them.
+       // (This is handled in setupSessionState).
+       
+       // If we are here, it means we need to fetch.
+       // Ideally User 2 just waits. But lets fetch from DB just in case User 1 is offline but data exists.
+    }
+
+    // Step 1: Fetch from 'bond_game_prompts' (The Cache)
     const { data: existingPrompts } = await gameService.getPromptsForGame(
       bondId,
       gtId,
@@ -359,78 +383,72 @@ export function useGameSession({
 
     console.log('📦 [Game] Existing prompts found:', existingPrompts?.length || 0, 'in', Date.now() - promptStart, 'ms');
     
-    if (existingPrompts && existingPrompts.length > 0) {
-      console.log('✅ [Game] Using existing prompts, no regeneration - TOTAL:', Date.now() - promptStart, 'ms');
-      setPrompts(existingPrompts);
-      
-      // If forceRegenerate is explicitly requested, we MUST regenerate regardless of pool size
-      if (options?.forceRegenerate) {
-        console.log('🔄 [Game] forceRegenerate requested, cycling prompts...');
-        setIsGenerating(true);
+    if (existingPrompts && existingPrompts.length > 0 && !options?.forceRegenerate) {
+        // Found existing prompts in cache. Use them.
+        console.log('✅ [Game] Using existing cache prompts.');
+        setPrompts(existingPrompts);
         
-        // Mark current prompts as used
-        await gameService.markPromptsAsUsed(bondId, gtId);
-        
-        // Generate new ones
-        await gameService.generatePrompts(
-          bondId, 
-          gameTypeSlug, 
-          { 
-            heatLevel: options?.heatLevel, 
-            mode: options?.mode,
-            count: 30 
-          }
-        );
-        
-        // Reset session index to 0 so both users start at the beginning
-        if (session?.id) {
-          console.log('🔄 [Game] Resetting session index to 0...');
-          await supabase
+        // SYNC: Update the session so partner sees the same list
+        if (session) {
+             await supabase
             .from('game_sessions')
-            .update({ current_prompt_index: 0 })
+            .update({ prompts: existingPrompts })
             .eq('id', session.id);
         }
         
-        // Fetch the new batch
-        const { data: newPrompts } = await gameService.getPromptsForGame(
-          bondId, 
-          gtId, 
-          { limit: 50, heatLevel: options?.heatLevel, mode: options?.mode }
-        );
-        if (newPrompts) {
-          setPrompts(newPrompts);
+    } else {
+        // Empty cache OR Force Regenerate
+        
+        // Critical: Only User 1 should generate if both are present. 
+        // Or whoever initiated the forceRegenerate.
+        // If this is an automatic load (options.forceRegenerate is undefined), only User 1 generates.
+        if (isUser1 || options?.forceRegenerate) {
+             console.log('🔄 [Game] Generating new prompts...');
+             setIsGenerating(true);
+             
+             // If forcing, mark old as used
+             if (options?.forceRegenerate) {
+                 await gameService.markPromptsAsUsed(bondId, gtId);
+             }
+
+             // Generate
+             const { error: genError } = await gameService.generatePrompts(
+                bondId, 
+                gameTypeSlug, 
+                { 
+                  heatLevel: options?.heatLevel, 
+                  mode: options?.mode,
+                  count: 30
+                }
+             );
+             
+             if (!genError) {
+                 // Fetch the newly generated ones
+                 const { data: newPrompts } = await gameService.getPromptsForGame(
+                   bondId, 
+                   gtId, 
+                   { limit: 50, heatLevel: options?.heatLevel, mode: options?.mode }
+                 );
+                 
+                 if (newPrompts) {
+                   setPrompts(newPrompts);
+                   // SYNC: Update session
+                   if (session) {
+                       await supabase
+                        .from('game_sessions')
+                        .update({ 
+                            prompts: newPrompts,
+                            current_prompt_index: 0 // Reset index on generation
+                        })
+                        .eq('id', session.id);
+                   }
+                 }
+             }
+             setIsGenerating(false);
+        } else {
+            console.log('⏳ [Game] Waiting for partner to generate prompts...');
+            // User 2 just waits. The Realtime subscription will deliver the prompts.
         }
-        setIsGenerating(false);
-      }
-    } else if (options?.forceRegenerate || existingPrompts?.length === 0) {
-      // Only generate if no prompts exist (and we didn't just handle forceRegenerate above)
-      // Note: If forceRegenerate was true, we would have entered the first block if prompts existed.
-      // So here means prompts=0.
-      console.log('🆕 [Game] No prompts found, generating new prompts via AI...');
-      console.log('⏳ [Game] AI generation starting at', Date.now() - promptStart, 'ms');
-      setIsGenerating(true);
-      const { error: genError } = await gameService.generatePrompts(
-        bondId, 
-        gameTypeSlug, 
-        { 
-          heatLevel: options?.heatLevel, 
-          mode: options?.mode,
-          count: 30
-        }
-      );
-      console.log('⏳ [Game] AI generation finished at', Date.now() - promptStart, 'ms');
-      
-      if (!genError) {
-        const { data: newPrompts } = await gameService.getPromptsForGame(
-          bondId, 
-          gtId, 
-          { limit: 50, heatLevel: options?.heatLevel, mode: options?.mode }
-        );
-        if (newPrompts) {
-          setPrompts(newPrompts);
-        }
-      }
-      setIsGenerating(false);
     }
   };
 
@@ -452,30 +470,34 @@ export function useGameSession({
           
           console.log('📡 [Game] Real-time update received', { 
             newIndex: newData.current_prompt_index,
-            oldIndex: oldData?.current_prompt_index,
+            promptCount: (newData.prompts as any)?.length,
             heatChanged: oldData?.heat_level !== undefined && newData.heat_level !== oldData.heat_level,
-            modeChanged: oldData?.mode !== undefined && newData.mode !== oldData.mode
           });
           
-          // Check for config changes that require prompt reload
-          // IMPORTANT: Only trigger if oldData values exist (not first sync)
-          const heatChanged = oldData?.heat_level !== undefined && newData.heat_level !== oldData.heat_level;
-          const modeChanged = oldData?.mode !== undefined && newData.mode !== oldData.mode;
-          
-          if (heatChanged || modeChanged) {
-            console.log('🔥 [Game] Config changed remotely, reloading prompts...');
-            await loadPrompts(bondId, newData.game_type_id, {
-              heatLevel: newData.heat_level,
-              mode: newData.mode
-            });
-          }
-
-          // Update current index (this is the key sync!)
-          console.log('📍 [Game] Syncing index to:', newData.current_prompt_index || 0);
-          setCurrentIndex(newData.current_prompt_index || 0);
           setSession(newData);
           
-          // Update ready states and answers based on position
+          // 1. Sync Prompts
+          // If prompts array changed, update local state
+          const newPrompts = newData.prompts as unknown as GamePrompt[];
+          // Simple equality check by length or ID
+          const oldPromptsLength = (oldData.prompts as unknown as GamePrompt[])?.length || 0;
+          
+          if (newPrompts && newPrompts.length > 0 && newPrompts.length !== oldPromptsLength) {
+              console.log('📡 [Game] Received new prompt list from session.');
+              setPrompts(newPrompts);
+              setIsLoading(false); 
+              setIsGenerating(false);
+          } else if (newPrompts && newPrompts.length > 0 && prompts.length === 0) {
+              // Initial sync arriving late
+              console.log('📡 [Game] Received initial prompt list.');
+              setPrompts(newPrompts);
+              setIsLoading(false);
+          }
+
+          // 2. Sync Index
+          setCurrentIndex(newData.current_prompt_index || 0);
+          
+          // 3. Sync Responses/Ready
           if (isUser1) {
             setIAmReady(newData.user_1_ready);
             setPartnerReady(newData.user_2_ready);
@@ -488,11 +510,10 @@ export function useGameSession({
             setPartnerAnswer(newData.user_1_response || null);
           }
 
-          // Sync spin state from partner
+          // 4. Sync Spin (Hard Dare)
           if (newData.spin_result !== oldData.spin_result) {
             setSpinResult(newData.spin_result || null);
             if (newData.spin_result && !oldData.spin_result) {
-              // Partner initiated spin - start our animation too
               setIsSpinning(true);
               setTimeout(() => {
                 setSpinComplete(true);
@@ -503,8 +524,8 @@ export function useGameSession({
           if (newData.spin_complete !== oldData.spin_complete) {
             setSpinComplete(newData.spin_complete || false);
           }
-          // Reset spin state when moving to new card
-          if (newData.current_prompt_index !== oldData.current_prompt_index) {
+           // Reset spin state when moving to new card
+           if (newData.current_prompt_index !== oldData.current_prompt_index) {
             setSpinResult(newData.spin_result || null);
             setSpinComplete(newData.spin_complete || false);
             setIsSpinning(false);
@@ -512,13 +533,11 @@ export function useGameSession({
         }
       )
       .on('broadcast', { event: 'refresh-prompts' }, async () => {
-         console.log('Received refresh broadcast, reloading prompts...');
-         if (session) {
-           await loadPrompts(bondId, session.game_type_id, {
-             heatLevel: session.heat_level,
-             mode: session.mode
-           });
-         }
+         // With the new Logic, strictly rely on Session Update.
+         // But we can show a toaster or loading state.
+         console.log('Received refresh broadcast');
+         setIsGenerating(true); 
+         // Do NOT call loadPrompts here. Wait for the Postgres UPDATE with the new prompts.
       })
       .subscribe();
   };
@@ -556,8 +575,6 @@ export function useGameSession({
     const newIndex = currentIndex + 1;
     console.log('➡️ [Game] Moving to index:', newIndex, 'Deck size:', prompts.length);
     
-    // Update in database - this will trigger real-time sync
-    // Also reset spin state for the new card
     const { error } = await supabase
       .from('game_sessions')
       .update({ 
@@ -578,7 +595,6 @@ export function useGameSession({
       setPartnerReady(false);
       setMyAnswer(null);
       setPartnerAnswer(null);
-      // Reset local spin state
       setSpinResult(null);
       setSpinComplete(false);
       setIsSpinning(false);
@@ -647,7 +663,7 @@ export function useGameSession({
 
   // Refresh prompts - explicitly regenerate
   const refreshPrompts = useCallback(async () => {
-    if (!bondId || !gameType) return;
+    if (!bondId || !gameType || !session) return;
     
     // Broadcast to partner that we are refreshing
     if (channelRef.current) {
@@ -658,14 +674,13 @@ export function useGameSession({
       });
     }
 
-    const currentHeat = session?.heat_level;
-    const currentMode = session?.mode;
-
-    // Force regeneration with the flag
+    // Call loadPrompts with forceRegenerate: true
+    // This will trigger generation, fetch new prompts, and UPDATE the session.prompts
+    // The partner (and myself) will receive the update via Postgres subscription
     await loadPrompts(bondId, gameType.id, { 
-      heatLevel: currentHeat, 
-      mode: currentMode,
-      forceRegenerate: true  // Explicitly request regeneration
+      heatLevel: session.heat_level, 
+      mode: session.mode,
+      forceRegenerate: true
     });
   }, [bondId, gameType, session]);
 
@@ -688,36 +703,29 @@ export function useGameSession({
   const initiateSpin = useCallback(async () => {
     if (!session || !user || spinResult || isSpinning) return;
     
-    // Set local spinning state immediately
     setIsSpinning(true);
     
-    // Randomly determine result
     const result: 'user_1' | 'user_2' = Math.random() < 0.5 ? 'user_1' : 'user_2';
     
-    // Update database - this triggers sync to partner
     const { error } = await supabase
       .from('game_sessions')
       .update({
         spin_result: result,
         spin_initiated_by: user.id,
-        spin_complete: false, // Will be set to true after animation
+        spin_complete: false,
       })
       .eq('id', session.id);
     
     if (!error) {
       setSpinResult(result);
-      
-      // Mark spin as complete after animation duration
       setTimeout(async () => {
         setSpinComplete(true);
         setIsSpinning(false);
-        
-        // Update DB to mark complete
         await supabase
           .from('game_sessions')
           .update({ spin_complete: true })
           .eq('id', session.id);
-      }, 3000); // Match animation duration
+      }, 3000);
     } else {
       setIsSpinning(false);
     }

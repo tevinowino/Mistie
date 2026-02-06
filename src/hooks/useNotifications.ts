@@ -109,7 +109,7 @@ async function registerForPushNotificationsAsync() {
     // We try/catch because sometimes projectId config is tricky in Dev.
     try {
       const tokenData = await Notifications.getExpoPushTokenAsync({
-        // projectId: Constants.expoConfig.extra.eas.projectId, // If using EAS
+        projectId: '43723db9-164d-451f-af1d-5f302c5d21aa',
       });
       token = tokenData.data;
       console.log('Push Token:', token);
