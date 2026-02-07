@@ -7,8 +7,9 @@
 //   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 // };
 
-// // Categories for variety
-// const CATEGORIES = ['gratitude', 'dreams', 'memories', 'growth', 'fun', 'deep', 'future', 'intimacy'];
+// // Minimum pool size before we refill
+// const MIN_POOL_SIZE = 50;
+// const TARGET_POOL_SIZE = 150;
 
 // /**
 //  * Generate prompts using Gemini AI
@@ -20,7 +21,7 @@
 // Guidelines:
 // - Questions should spark meaningful conversation
 // - Mix of fun, deep, and reflective topics
-// - Maximum 20 words per question
+// - Maximum 25 words per question
 // - Avoid yes/no questions
 // - No introductory text, no numbering
 // - Output ONLY a valid JSON array of strings
@@ -34,6 +35,8 @@
 // - Deep ("What's something you've been afraid to tell me?")
 // - Future ("Where do you see us in 5 years?")
 // - Intimacy ("What makes you feel most loved by me?")
+// - Appreciation ("What is one thing I did recently that made you feel special?")
+// - Playful ("What's a silly habit of mine that you secretly love?")
 
 // Example output:
 // ["What made you smile about us today?", "What's one thing I do that makes you feel safe?"]
@@ -50,7 +53,7 @@
 //         contents: [{ parts: [{ text: systemPrompt }] }],
 //         generationConfig: { 
 //           temperature: 0.9,
-//           maxOutputTokens: 2048,
+//           maxOutputTokens: 4096,
 //         },
 //       }),
 //     });
@@ -69,23 +72,16 @@
 //     if (jsonMatch) {
 //       const parsed = JSON.parse(jsonMatch[0]);
 //       if (Array.isArray(parsed)) {
-//         return parsed.filter((q: unknown) => typeof q === 'string' && q.length > 10);
+//         return parsed.filter((q: unknown) => typeof q === 'string' && q.length > 10 && q.length < 200);
 //       }
 //     }
 
-//     console.warn('AI response was not a valid JSON array:', text);
+//     console.warn('AI response was not a valid JSON array:', text.substring(0, 200));
 //     return [];
 //   } catch (error) {
 //     console.error('Error calling Gemini API:', error);
 //     return [];
 //   }
-// }
-
-// /**
-//  * Assign a random category to a prompt
-//  */
-// function getRandomCategory(): string {
-//   return CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
 // }
 
 // // ============================================================================
@@ -108,56 +104,54 @@
 //       throw new Error('Missing GEMINI_API_KEY environment variable');
 //     }
 
-//     // Parse optional parameters
-//     let targetCount = 50; // Default: generate 50 prompts
-//     let forceRefill = false;
-
-//     try {
-//       const body = await req.json();
-//       if (body.count) targetCount = Math.min(body.count, 100); // Cap at 100
-//       if (body.force) forceRefill = true;
-//     } catch {
-//       // Body might be empty, use defaults
-//     }
-
-//     // 1. Check current pool size
-//     const { count: currentCount, error: countError } = await supabase
+//     // 1. Count available prompts (not yet seen by ANY bond)
+//     // We count total prompts since each bond tracks seen prompts separately
+//     const { count: totalPrompts, error: countError } = await supabase
 //       .from('daily_dew_prompts')
 //       .select('*', { count: 'exact', head: true });
 
 //     if (countError) throw countError;
 
-//     const poolSize = currentCount || 0;
+//     const poolSize = totalPrompts || 0;
 //     console.log(`[RefillPool] Current pool size: ${poolSize}`);
 
-//     // 2. Skip if pool is healthy (unless forced)
-//     if (poolSize >= 100 && !forceRefill) {
+//     // 2. Skip if pool is healthy
+//     if (poolSize >= MIN_POOL_SIZE) {
 //       return new Response(
 //         JSON.stringify({ 
 //           success: true, 
-//           message: 'Pool is healthy, skipping refill',
+//           message: 'Pool is healthy, no refill needed',
 //           poolSize 
 //         }),
 //         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
 //       );
 //     }
 
-//     // 3. Generate new prompts with AI
-//     console.log(`[RefillPool] Generating ${targetCount} new prompts...`);
-//     const newPrompts = await generatePromptsWithAI(GEMINI_API_KEY, targetCount);
+//     // 3. Calculate how many prompts we need
+//     const promptsNeeded = TARGET_POOL_SIZE - poolSize;
+//     console.log(`[RefillPool] Pool low! Generating ${promptsNeeded} new prompts...`);
 
-//     if (newPrompts.length === 0) {
+//     // 4. Generate prompts in batches (Gemini works better with smaller batches)
+//     const allNewPrompts: string[] = [];
+//     const BATCH_SIZE = 25;
+    
+//     for (let generated = 0; generated < promptsNeeded; generated += BATCH_SIZE) {
+//       const batchSize = Math.min(BATCH_SIZE, promptsNeeded - generated);
+//       const batchPrompts = await generatePromptsWithAI(GEMINI_API_KEY, batchSize);
+//       allNewPrompts.push(...batchPrompts);
+//       console.log(`[RefillPool] Generated batch: ${batchPrompts.length} prompts`);
+//     }
+
+//     if (allNewPrompts.length === 0) {
 //       throw new Error('AI failed to generate any prompts');
 //     }
 
-//     console.log(`[RefillPool] AI generated ${newPrompts.length} prompts`);
+//     console.log(`[RefillPool] Total generated: ${allNewPrompts.length} prompts`);
 
-//     // 4. Insert into pool (with deduplication)
-//     const insertData = newPrompts.map((question_text) => ({
+//     // 5. Insert into pool (with deduplication via unique constraint)
+//     const insertData = allNewPrompts.map((question_text) => ({
 //       question_text,
-//       category: getRandomCategory(),
-//       min_age: 18, // Default to adult
-//       dynamic: [], // General prompts, apply to all dynamics
+//       category: null, // Let AI categorize later if needed
 //     }));
 
 //     const { data: inserted, error: insertError } = await supabase
@@ -166,7 +160,7 @@
 //         onConflict: 'question_text',
 //         ignoreDuplicates: true 
 //       })
-//       .select();
+//       .select('id');
 
 //     if (insertError) {
 //       console.error('Insert error:', insertError);
@@ -174,9 +168,9 @@
 //     }
 
 //     const insertedCount = inserted?.length || 0;
-//     console.log(`[RefillPool] Inserted ${insertedCount} new prompts`);
+//     console.log(`[RefillPool] Inserted ${insertedCount} new prompts (duplicates ignored)`);
 
-//     // 5. Get updated pool size
+//     // 6. Get updated pool size
 //     const { count: newPoolSize } = await supabase
 //       .from('daily_dew_prompts')
 //       .select('*', { count: 'exact', head: true });
@@ -185,7 +179,7 @@
 //       JSON.stringify({
 //         success: true,
 //         message: `Pool refilled successfully`,
-//         generated: newPrompts.length,
+//         generated: allNewPrompts.length,
 //         inserted: insertedCount,
 //         previousPoolSize: poolSize,
 //         currentPoolSize: newPoolSize,
