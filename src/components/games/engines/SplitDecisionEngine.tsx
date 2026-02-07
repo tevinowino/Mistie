@@ -3,13 +3,13 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, ChevronRight, Split } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-    FadeIn,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    ZoomIn
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  ZoomIn
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GameEngineProps } from './types';
@@ -94,6 +94,7 @@ export const SplitDecisionEngine: React.FC<GameEngineProps> = ({
   onNext,
   hasSeenTutorial,
   markTutorialSeen,
+  backgroundImage,
 }) => {
   const insets = useSafeAreaInsets();
   const currentPrompt = prompts[currentIndex];

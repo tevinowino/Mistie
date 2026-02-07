@@ -1,6 +1,7 @@
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { GamePrompt, gameService, GameSession, GameType } from '@/src/services/gameService';
+import { notificationService } from '@/src/services/notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';

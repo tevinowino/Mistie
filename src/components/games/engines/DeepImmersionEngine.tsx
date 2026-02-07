@@ -15,10 +15,13 @@ export const DeepImmersionEngine: React.FC<GameEngineProps> = ({
   markTutorialSeen,
   backgroundImage,
   session,
+  gameTypeSlug,
 }) => {
   const [showTutorial, setShowTutorial] = useState(!hasSeenTutorial);
   const currentPrompt = prompts[currentIndex];
-  const gameMeta = session?.game_type_slug ? getGameMeta(session.game_type_slug) : null;
+  // prefer prop, fallback to nested if available (though type might not show it)
+  const slug = gameTypeSlug || (session as any)?.game_types?.slug;
+  const gameMeta = slug ? getGameMeta(slug) : null;
 
   useEffect(() => {
     if (!hasSeenTutorial) {

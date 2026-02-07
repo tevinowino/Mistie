@@ -1,3 +1,4 @@
+import StreakMilestoneModal from '@/src/components/celebrations/StreakMilestoneModal';
 import { FloatingHeader } from '@/src/components/ui/FloatingHeader';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';

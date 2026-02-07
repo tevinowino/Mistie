@@ -41,7 +41,7 @@ export const ActiveGameBanner = ({ session }: ActiveGameBannerProps) => {
       style={styles.container}
     >
       <LinearGradient
-        colors={session.game_types.gradient_colors || [colors.primary, colors.secondary]}
+        colors={(session.game_types.gradient_colors as any) || [colors.primary, colors.secondary]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradient}

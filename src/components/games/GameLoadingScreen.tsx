@@ -5,6 +5,7 @@ import React, { useEffect } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     Easing,
+    FadeIn,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
@@ -141,7 +142,7 @@ export const GameLoadingScreen = ({
             {/* Footer Tip */}
             <View style={styles.footer}>
                 <Text style={styles.tipLabel}>TIP</Text>
-                <Animated.Text entering={Animated.FadeIn} key={tip} style={styles.tipText}>
+                <Animated.Text entering={FadeIn} key={tip} style={styles.tipText}>
                     "{tip}"
                 </Animated.Text>
             </View>

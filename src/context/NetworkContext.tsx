@@ -19,7 +19,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     isInternetReachable: true,
     type: NetInfoStateType.unknown,
     details: null,
-  });
+  } as unknown as NetInfoState);
 
   useEffect(() => {
     // Subscribe to network state updates

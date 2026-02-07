@@ -14,5 +14,5 @@ export interface GameEngineProps {
   markTutorialSeen: () => Promise<void>;
   bondId: string;
   backgroundImage?: any;
-  session?: any;
+  gameTypeSlug?: string;
 }
