@@ -88,5 +88,59 @@ export const notificationService = {
       type: 'daily_dew',
       data: { route: '/(tabs)/dew' }
     });
+  },
+
+  /**
+   * Helper: Send Game Invite notification
+   */
+  async notifyGameInvite(recipientId: string, partnerName: string, gameTitle: string, gameSlug: string) {
+    return this.send({
+      userIds: [recipientId],
+      title: `${partnerName} started a game! 🎮`,
+      body: `Join them in ${gameTitle}`,
+      type: 'game_invite',
+      data: { route: `/games/${gameSlug}` }
+    });
+  },
+
+  /**
+   * Helper: Send Streak Milestone notification
+   */
+  async notifyStreakMilestone(userIds: string[], streakCount: number) {
+    return this.send({
+      userIds,
+      title: `${streakCount} Day Streak! 🔥`,
+      body: `Amazing! You and your partner have answered ${streakCount} Dews in a row!`,
+      type: 'system',
+      data: { type: 'milestone', streak: streakCount }
+    });
+  },
+
+  /**
+   * Helper: Send Birthday notification
+   */
+  async notifyBirthday(recipientId: string, birthdayPersonName: string) {
+    return this.send({
+      userIds: [recipientId],
+      title: `It's ${birthdayPersonName}'s Birthday! 🎂`,
+      body: `Don't forget to wish them a happy birthday!`,
+      type: 'system',
+      data: { type: 'birthday' }
+    });
+  },
+
+  /**
+   * Helper: Send Dew Reminder (Streak preservation)
+   */
+  async notifyDewReminder(recipientId: string, currentStreak: number) {
+    return this.send({
+      userIds: [recipientId],
+      title: 'Keep Your Streak Alive! 🔥',
+      body: currentStreak > 0 
+        ? `You're on a ${currentStreak}-day streak. Answer today's Dew!`
+        : `Answer today's Daily Dew before midnight!`,
+      type: 'reminder',
+      data: { route: '/(tabs)/dew' }
+    });
   }
 };

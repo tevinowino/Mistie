@@ -10,7 +10,7 @@
       "policy": "appVersion"
     },
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/mistie-icon.png",
     "scheme": "mistie",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -21,16 +21,17 @@
       "package": "com.mistie.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/logo.png",
-        "backgroundImage": "./assets/images/logo.png",
-        "monochromeImage": "./assets/images/logo.png"
+        "foregroundImage": "./assets/images/mistie-icon.png",
+        "backgroundImage": "./assets/images/mistie-icon.png",
+        "monochromeImage": "./assets/images/mistie-icon.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/logo.png",
+      "favicon": "./assets/images/mistie-icon.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -38,7 +39,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/logo.png",
+          "icon": "./assets/images/mistie-icon.png",
           "color": "#E6F4FE",
           "defaultChannel": "default"
         }
@@ -46,7 +47,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.png",
+          "image": "./assets/images/full-logo-no-bg.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

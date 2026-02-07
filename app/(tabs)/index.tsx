@@ -432,7 +432,7 @@ export default function Dashboard() {
         {/* Featured Games */}
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Suggested for You ✨</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Suggested for You </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>Try something new today</Text>
           </View>
           <TouchableOpacity 

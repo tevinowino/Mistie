@@ -45,13 +45,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
-        markSupabaseInitialized(); // Allow auto-refresh now
       })
       .catch((error) => {
         clearTimeout(sessionTimeout);
         console.error('Error getting session:', error);
         setIsLoading(false);
-        markSupabaseInitialized(); // Allow auto-refresh even on error
       });
 
     // Listen for changes

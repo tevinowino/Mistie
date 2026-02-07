@@ -48,21 +48,22 @@
 // `,
 
 //   'intimacy': (heatLevel, mode, dynamic) => `
-// // Generate exactly 50 unique intimacy prompts for consenting adult couples.
+// Generate exactly 50 unique intimacy questions for consenting adult couples.
 
-// // Context:
-// // - Heat Level: ${heatLevel} - ${HEAT_DESCRIPTIONS[heatLevel]}
-// // - Mode: ${mode === 'virtual' ? 'Long-distance/video call compatible' : 'In-person, physical presence'}
-// // - Relationship Dynamic: ${dynamic || 'General Couple'}
+// Context:
+// - Heat Level: ${heatLevel} - ${HEAT_DESCRIPTIONS[heatLevel]}
+// - Mode: ${mode === 'virtual' ? 'Long-distance/video call compatible' : 'In-person, physical presence'}
+// - Relationship Dynamic: ${dynamic || 'General Couple'}
 
-// // Requirements:
-// // - Focus on building physical and emotional connection
-// // - ${mode === 'virtual' ? 'All prompts must be doable over video call' : 'Prompts can involve physical touch'}
-// // - This is for 18+ verified users only
+// Requirements:
+// - MUST be deep questions about intimacy, fantasies, and desires.
+// - DO NOT include physical actions, dares, or commands (e.g., "Lean closer", "Touch me").
+// - Focus on verbal communication and understanding each other's needs.
+// - This is for 18+ verified users only
 
-// // Response format - return ONLY a valid JSON array, no markdown:
-// // [{"prompt": "the intimacy prompt text"}, ...]
-// `,
+// Response format - return ONLY a valid JSON array, no markdown:
+// [{"prompt": "the intimacy question text"}, ...]
+`,
 
 //   'hard-dare': (heatLevel, mode, dynamic) => `
 // // Generate exactly 50 unique dares for consenting adult couples.

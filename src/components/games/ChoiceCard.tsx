@@ -1,7 +1,7 @@
 import { colors } from '@/src/theme/colors';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Check, ChevronLeft, ChevronRight, Lock } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Animated,
@@ -29,11 +29,13 @@ interface ChoiceCardProps {
   myName?: string;
   partnerName?: string;
   questionLabel?: string;
-  agreeOnMatch?: boolean;
+  agreeOnMatch?: boolean; // True for "Who's more likely", false for "Is it okay" (where we want to see if we accept the prompt)
   // Selected choices (from both users)
+  // For "Is It Okay": 'me' = Okay, 'partner' = Not Okay
   myChoice?: 'me' | 'partner' | null;
   partnerChoice?: 'me' | 'partner' | null;
   onSelect?: (choice: 'me' | 'partner') => void;
+  mode?: 'whos-more-likely' | 'is-it-okay';
 }
 
 export function ChoiceCard({
@@ -52,12 +54,17 @@ export function ChoiceCard({
   myChoice = null,
   partnerChoice = null,
   onSelect,
+  mode = 'whos-more-likely',
 }: ChoiceCardProps) {
   const cardScale = useRef(new Animated.Value(1)).current;
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const [currentPrompt, setCurrentPrompt] = useState(prompt);
   const [selectedChoice, setSelectedChoice] = useState<'me' | 'partner' | null>(myChoice);
   const [showResult, setShowResult] = useState(false);
+
+  // Labels based on mode
+  const optionALabel = mode === 'is-it-okay' ? 'Okay' : myName;
+  const optionBLabel = mode === 'is-it-okay' ? 'Not Okay' : partnerName;
 
   // Reset when prompt changes
   useEffect(() => {
@@ -163,12 +170,17 @@ export function ChoiceCard({
   }, [selectedChoice, onSelect, cardScale]);
 
   const handleNext = useCallback(() => {
+    if (mode === 'is-it-okay' && !showResult) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // State reset happens via useEffect when prompt changes
     // Reset pan ensure it's centered
     pan.setValue({ x: 0, y: 0 });
     onNext();
-  }, [onNext, pan]);
+  }, [onNext, pan, mode, showResult]);
 
   const handlePrevious = useCallback(() => {
     if (!canGoBack || cardNumber <= 1) return;
@@ -177,40 +189,47 @@ export function ChoiceCard({
     onPrevious();
   }, [canGoBack, cardNumber, onPrevious, pan]);
 
-  // Determine what icon to show for each choice
-  const getMeIcon = () => {
-    if (!showResult) return null;
-    
-    const partnerPickedMe = agreeOnMatch ? partnerChoice === 'me' : partnerChoice === 'partner';
-    const iPickedMe = myChoice === 'me';
-    
-    // Check if we agreed logic
-    if (iPickedMe && partnerPickedMe) return '✅'; // Match!
-    
-    // Check if we disagreed but one/both picked ME
-    if (iPickedMe) return '🙋'; 
-    if (partnerPickedMe) return '👆'; 
-    
-    return null;
+
+  // Helper to render "Map Pins" for Is It Okay mode
+  const renderPins = (option: 'me' | 'partner') => {
+    if (!showResult || mode !== 'is-it-okay') return null;
+
+    const myPin = myChoice === option;
+    const partnerPin = partnerChoice === option;
+
+    if (!myPin && !partnerPin) return null;
+
+    return (
+      <View style={styles.pinsContainer}>
+        {myPin && (
+          <View style={[styles.pin, { backgroundColor: '#4CC9F0' }]}>
+            <Text style={styles.pinText}>{myName.charAt(0)}</Text>
+          </View>
+        )}
+        {partnerPin && (
+          <View style={[styles.pin, { backgroundColor: '#F72585', marginLeft: myPin ? -8 : 0 }]}>
+            <Text style={styles.pinText}>{partnerName.charAt(0)}</Text>
+          </View>
+        )}
+      </View>
+    );
   };
 
-  const getPartnerIcon = () => {
-    if (!showResult) return null;
-    
-    const partnerPickedPartner = agreeOnMatch ? partnerChoice === 'partner' : partnerChoice === 'me';
-    const iPickedPartner = myChoice === 'partner';
-    
-    if (iPickedPartner && partnerPickedPartner) return '✅'; // Match!
-    
-    if (iPickedPartner) return '🙋'; 
-    if (partnerPickedPartner) return '👆'; 
-    
-    return null;
-  };
+  // Helper for "Who's More Likely" icons
+  const getWMLIcon = (option: 'me' | 'partner') => {
+      if (!showResult || mode !== 'whos-more-likely') return null;
+      
+      const optionIsMe = option === 'me';
+      const iPickedThis = myChoice === option;
+      const partnerPickedThis = partnerChoice === option;
 
-  const hasAgreed = agreeOnMatch 
-    ? myChoice === partnerChoice
-    : myChoice !== partnerChoice;
+      if (iPickedThis && partnerPickedThis) return '✅';
+      if (iPickedThis) return '🙋';
+      if (partnerPickedThis) return '👆';
+      return null;
+  }
+
+  const isNextDisabled = mode === 'is-it-okay' && !showResult;
 
   return (
     <View style={styles.container}>
@@ -263,12 +282,13 @@ export function ChoiceCard({
 
             {/* Choices */}
             <View style={styles.choicesContainer}>
-              {/* Me Button */}
+              {/* Option A (Me/Okay) */}
               <TouchableOpacity
                 style={[
                   styles.choiceButton,
                   selectedChoice === 'me' && styles.choiceButtonSelected,
-                  showResult && myChoice === 'me' && styles.choiceButtonHighlight,
+                  (showResult && myChoice === 'me' && mode === 'whos-more-likely') && styles.choiceButtonHighlight,
+                  (mode === 'is-it-okay' && selectedChoice === 'me') && { borderColor: '#4CC9F0', backgroundColor: 'rgba(76, 201, 240, 0.15)' }
                 ]}
                 onPress={() => handleSelect('me')}
                 disabled={!!selectedChoice}
@@ -278,16 +298,23 @@ export function ChoiceCard({
                   styles.choiceText,
                   selectedChoice === 'me' && styles.choiceTextSelected,
                 ]}>
-                  {myName}
+                  {optionALabel}
                 </Text>
-                {selectedChoice === 'me' && (
+
+                 {/* Selection Checkmark */}
+                {selectedChoice === 'me' && mode !== 'is-it-okay' && (
                   <View style={styles.selectedBadge}>
                     <Check color="white" size={14} />
                   </View>
                 )}
-                {getMeIcon() && (
-                  <Text style={styles.resultIcon}>{getMeIcon()}</Text>
-                )}
+
+                 {/* WML Result Icons */}
+                 {getWMLIcon('me') && (
+                    <Text style={styles.resultIcon}>{getWMLIcon('me')}</Text>
+                 )}
+
+                 {/* Is It Okay Map Pins */}
+                 {renderPins('me')}
               </TouchableOpacity>
 
               {/* Divider */}
@@ -295,12 +322,13 @@ export function ChoiceCard({
                 <Text style={styles.dividerText}>or</Text>
               </View>
 
-              {/* Partner Button */}
+              {/* Option B (Partner/Not Okay) */}
               <TouchableOpacity
                 style={[
                   styles.choiceButton,
                   selectedChoice === 'partner' && styles.choiceButtonSelected,
-                  showResult && myChoice === 'partner' && styles.choiceButtonHighlight,
+                  (showResult && myChoice === 'partner' && mode === 'whos-more-likely') && styles.choiceButtonHighlight,
+                   (mode === 'is-it-okay' && selectedChoice === 'partner') && { borderColor: '#F72585', backgroundColor: 'rgba(247, 37, 133, 0.15)' }
                 ]}
                 onPress={() => handleSelect('partner')}
                 disabled={!!selectedChoice}
@@ -310,16 +338,23 @@ export function ChoiceCard({
                   styles.choiceText,
                   selectedChoice === 'partner' && styles.choiceTextSelected,
                 ]}>
-                  {partnerName}
+                  {optionBLabel}
                 </Text>
-                {selectedChoice === 'partner' && (
+
+                {/* Selection Checkmark */}
+                {selectedChoice === 'partner' && mode !== 'is-it-okay' && (
                   <View style={styles.selectedBadge}>
                     <Check color="white" size={14} />
                   </View>
                 )}
-                {getPartnerIcon() && (
-                  <Text style={styles.resultIcon}>{getPartnerIcon()}</Text>
+                
+                {/* WML Result Icons */}
+                {getWMLIcon('partner') && (
+                    <Text style={styles.resultIcon}>{getWMLIcon('partner')}</Text>
                 )}
+
+                {/* Is It Okay Map Pins */}
+                {renderPins('partner')}
               </TouchableOpacity>
             </View>
 
@@ -327,21 +362,30 @@ export function ChoiceCard({
             {selectedChoice && !showResult && (
               <View style={styles.waitingContainer}>
                 <Text style={styles.waitingText}>
-                  Waiting for {partnerName} to answer...
+                  Waiting for {partnerName} to {mode === 'is-it-okay' ? 'vote' : 'answer'}...
                 </Text>
               </View>
             )}
 
-            {/* Results */}
-            {showResult && (
+            {/* Results Text */}
+            {showResult && mode === 'whos-more-likely' && (
               <View style={styles.resultsContainer}>
                 <Text style={styles.resultsText}>
-                  {hasAgreed 
+                  {myChoice === partnerChoice
                     ? '🎉 You both agree!' 
                     : '😄 Different opinions!'}
                 </Text>
               </View>
             )}
+             {showResult && mode === 'is-it-okay' && (
+              <View style={styles.resultsContainer}>
+                 {/* Only show text if mismatch, otherwise pins tell the story */}
+                 {myChoice !== partnerChoice && (
+                    <Text style={styles.resultsText}>Let's discuss!</Text>
+                 )}
+              </View>
+            )}
+
           </LinearGradient>
         </Animated.View>
       </View>
@@ -366,11 +410,16 @@ export function ChoiceCard({
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.navButton}
+          style={[styles.navButton, isNextDisabled && styles.navButtonDisabled]}
           onPress={handleNext}
+          disabled={isNextDisabled}
         >
-          <Text style={styles.navButtonText}>Next</Text>
-          <ChevronRight color={colors.text} size={24} />
+          <Text style={[styles.navButtonText, isNextDisabled && styles.navButtonTextDisabled]}>Next</Text>
+           {isNextDisabled ? (
+             <Lock color={colors.muted} size={16} /> 
+           ) : (
+             <ChevronRight color={colors.text} size={24} />
+           )}
         </TouchableOpacity>
       </View>
     </View>
@@ -552,5 +601,31 @@ const styles = StyleSheet.create({
   },
   navButtonTextDisabled: {
     color: colors.muted,
+  },
+  pinsContainer: {
+      position: 'absolute',
+      right: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  pin: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: 'white',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 3,
+  },
+  pinText: {
+      color: 'white',
+      fontFamily: 'Outfit',
+      fontWeight: 'bold',
+      fontSize: 12,
   },
 });

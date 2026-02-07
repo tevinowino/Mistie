@@ -91,6 +91,14 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
               <Check color="white" size={18} />
             </LinearGradient>
           </TouchableOpacity>
+
+
+          <TouchableOpacity 
+            style={styles.skipButton}
+            onPress={handleDismiss}
+          >
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
         </LinearGradient>
       </Animated.View>
     </View>
@@ -175,5 +183,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
+  },
+  skipButton: {
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  skipText: {
+    fontFamily: 'Quicksand',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    textDecorationLine: 'underline',
   },
 });

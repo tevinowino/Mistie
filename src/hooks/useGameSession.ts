@@ -1,6 +1,7 @@
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/lib/supabase';
 import { GamePrompt, gameService, GameSession, GameType } from '@/src/services/gameService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -35,6 +36,10 @@ interface UseGameSessionReturn {
   spinComplete: boolean;
   isSpinning: boolean;
   isUser1: boolean;
+  
+  // Tutorial State
+  hasSeenTutorial: boolean;
+  markTutorialSeen: () => Promise<void>;
 
   // Actions
   updateSessionConfig: (config: { heatLevel?: number; mode?: string }) => Promise<void>;
@@ -74,10 +79,14 @@ export function useGameSession({
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
   const [bondData, setBondData] = useState<{ user_1_id: string; user_2_id: string } | null>(null);
   
+
   // Spin state (for Hard Dare bottle spinner)
   const [spinResult, setSpinResult] = useState<'user_1' | 'user_2' | null>(null);
   const [spinComplete, setSpinComplete] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
+
+  // Tutorial State
+  const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
   
   // Refs
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -102,6 +111,30 @@ export function useGameSession({
       }
     };
   }, [bondId, gameTypeSlug, user]);
+
+  // Check tutorial state
+  useEffect(() => {
+    if (!gameTypeSlug) return;
+    checkTutorialStatus();
+  }, [gameTypeSlug]);
+
+  const checkTutorialStatus = async () => {
+    try {
+      const seen = await AsyncStorage.getItem(`tutorial_seen_${gameTypeSlug}`);
+      setHasSeenTutorial(seen === 'true');
+    } catch (e) {
+      console.warn('Error checking tutorial status', e);
+    }
+  };
+
+  const markTutorialSeen = async () => {
+    try {
+      await AsyncStorage.setItem(`tutorial_seen_${gameTypeSlug}`, 'true');
+      setHasSeenTutorial(true);
+    } catch (e) {
+      console.warn('Error saving tutorial status', e);
+    }
+  };
 
   const initializeSession = async () => {
     console.log('🎮 [Game] initializeSession called', { bondId, gameTypeSlug, userId: user?.id });
@@ -305,6 +338,20 @@ export function useGameSession({
       console.error('Error creating session:', error);
       return null;
     }
+
+    // NOTIFICATION: Game Invite
+    // Notify the partner that a game has been started
+    if (newSession && user && bondData) {
+      const partnerId = bondData.user_1_id === user.id ? bondData.user_2_id : bondData.user_1_id;
+      if (partnerId) {
+        const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', user.id).single();
+        const myName = myProfile?.display_name || 'Your partner';
+        const gameTitle = gt.name || 'a game';
+        const gameSlug = gt.slug || gameTypeSlug;
+        await notificationService.notifyGameInvite(partnerId, myName, gameTitle, gameSlug);
+      }
+    }
+
     return newSession as GameSession;
   };
 
@@ -474,12 +521,16 @@ export function useGameSession({
             heatChanged: oldData?.heat_level !== undefined && newData.heat_level !== oldData.heat_level,
           });
           
+          // Only update if we haven't already locally updated via broadcast
+          // Checks to prevent jitter if DB update arrives after broadcast
+          if (newData.current_prompt_index !== currentIndex) {
+             setCurrentIndex(newData.current_prompt_index || 0);
+          }
+          
           setSession(newData);
           
           // 1. Sync Prompts
-          // If prompts array changed, update local state
           const newPrompts = newData.prompts as unknown as GamePrompt[];
-          // Simple equality check by length or ID
           const oldPromptsLength = (oldData.prompts as unknown as GamePrompt[])?.length || 0;
           
           if (newPrompts && newPrompts.length > 0 && newPrompts.length !== oldPromptsLength) {
@@ -488,29 +539,25 @@ export function useGameSession({
               setIsLoading(false); 
               setIsGenerating(false);
           } else if (newPrompts && newPrompts.length > 0 && prompts.length === 0) {
-              // Initial sync arriving late
               console.log('📡 [Game] Received initial prompt list.');
               setPrompts(newPrompts);
               setIsLoading(false);
           }
 
-          // 2. Sync Index
-          setCurrentIndex(newData.current_prompt_index || 0);
-          
-          // 3. Sync Responses/Ready
+          // 2. Sync Responses/Ready
           if (isUser1) {
-            setIAmReady(newData.user_1_ready);
-            setPartnerReady(newData.user_2_ready);
-            setMyAnswer(newData.user_1_response || null);
-            setPartnerAnswer(newData.user_2_response || null);
+            if (newData.user_1_ready !== iAmReady) setIAmReady(newData.user_1_ready);
+            if (newData.user_2_ready !== partnerReady) setPartnerReady(newData.user_2_ready);
+            if (newData.user_1_response !== myAnswer) setMyAnswer(newData.user_1_response || null);
+            if (newData.user_2_response !== partnerAnswer) setPartnerAnswer(newData.user_2_response || null);
           } else {
-            setIAmReady(newData.user_2_ready);
-            setPartnerReady(newData.user_1_ready);
-            setMyAnswer(newData.user_2_response || null);
-            setPartnerAnswer(newData.user_1_response || null);
+            if (newData.user_2_ready !== iAmReady) setIAmReady(newData.user_2_ready);
+            if (newData.user_1_ready !== partnerReady) setPartnerReady(newData.user_1_ready);
+            if (newData.user_2_response !== myAnswer) setMyAnswer(newData.user_2_response || null);
+            if (newData.user_1_response !== partnerAnswer) setPartnerAnswer(newData.user_1_response || null);
           }
 
-          // 4. Sync Spin (Hard Dare)
+          // 3. Sync Spin (Hard Dare)
           if (newData.spin_result !== oldData.spin_result) {
             setSpinResult(newData.spin_result || null);
             if (newData.spin_result && !oldData.spin_result) {
@@ -532,24 +579,45 @@ export function useGameSession({
           }
         }
       )
+      .on('broadcast', { event: 'navigation' }, (payload) => {
+          console.log('⚡ [Game] Received navigation broadcast:', payload);
+          if (payload.index !== undefined) {
+              setCurrentIndex(payload.index);
+              // Reset local state on navigate
+              setIAmReady(false);
+              setPartnerReady(false);
+              setMyAnswer(null);
+              setPartnerAnswer(null);
+              setSpinResult(null);
+              setSpinComplete(false);
+              setIsSpinning(false);
+          }
+      })
+      .on('broadcast', { event: 'answer' }, (payload) => {
+          console.log('⚡ [Game] Received answer broadcast:', payload);
+          if (payload.userId !== user?.id) {
+              setPartnerAnswer(payload.answer);
+          }
+      })
+      .on('broadcast', { event: 'ready' }, (payload) => {
+          console.log('⚡ [Game] Received ready broadcast:', payload);
+          if (payload.userId !== user?.id) {
+              setPartnerReady(payload.isReady);
+          }
+      })
       .on('broadcast', { event: 'refresh-prompts' }, async () => {
-         // With the new Logic, strictly rely on Session Update.
-         // But we can show a toaster or loading state.
-         console.log('Received refresh broadcast');
+         console.log('⚡ [Game] Received refresh broadcast');
          setIsGenerating(true); 
-         // Do NOT call loadPrompts here. Wait for the Postgres UPDATE with the new prompts.
       })
       .subscribe();
   };
 
   const subscribeToPresence = (sessionId: string) => {
-    // Subscribe to partner presence
     presenceChannelRef.current = supabase
       .channel(`presence:game:${sessionId}`)
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannelRef.current?.presenceState() || {};
         const userIds = Object.keys(state);
-        // Partner is connected if there's more than 1 user
         setPartnerConnected(userIds.length > 1);
       })
       .on('presence', { event: 'join' }, () => {
@@ -573,9 +641,29 @@ export function useGameSession({
     
     // Allow index to go one past the end to show "Deck Complete" screen
     const newIndex = currentIndex + 1;
-    console.log('➡️ [Game] Moving to index:', newIndex, 'Deck size:', prompts.length);
+    console.log('➡️ [Game] Moving to index:', newIndex);
     
-    const { error } = await supabase
+    // 1. Optimistic Update (Local)
+    setCurrentIndex(newIndex);
+    setIAmReady(false);
+    setPartnerReady(false);
+    setMyAnswer(null);
+    setPartnerAnswer(null);
+    setSpinResult(null);
+    setSpinComplete(false);
+    setIsSpinning(false);
+
+    // 2. Optimistic Update (Broadcast)
+    if (channelRef.current) {
+        channelRef.current.send({
+            type: 'broadcast',
+            event: 'navigation',
+            payload: { index: newIndex }
+        });
+    }
+    
+    // 3. Persistence (DB)
+    await supabase
       .from('game_sessions')
       .update({ 
         current_prompt_index: newIndex,
@@ -589,16 +677,6 @@ export function useGameSession({
       })
       .eq('id', session.id);
 
-    if (!error) {
-      setCurrentIndex(newIndex);
-      setIAmReady(false);
-      setPartnerReady(false);
-      setMyAnswer(null);
-      setPartnerAnswer(null);
-      setSpinResult(null);
-      setSpinComplete(false);
-      setIsSpinning(false);
-    }
   }, [session, currentIndex, prompts.length]);
 
   // Navigate to previous card - synced!
@@ -609,7 +687,24 @@ export function useGameSession({
     const newIndex = currentIndex - 1;
     console.log('⬅️ [Game] Moving to index:', newIndex);
     
-    const { error } = await supabase
+    // 1. Optimistic Update (Local)
+    setCurrentIndex(newIndex);
+    setIAmReady(false);
+    setPartnerReady(false);
+    setMyAnswer(null);
+    setPartnerAnswer(null);
+
+    // 2. Optimistic Update (Broadcast)
+    if (channelRef.current) {
+        channelRef.current.send({
+            type: 'broadcast',
+            event: 'navigation',
+            payload: { index: newIndex }
+        });
+    }
+    
+    // 3. Persistence (DB)
+    await supabase
       .from('game_sessions')
       .update({ 
         current_prompt_index: newIndex,
@@ -620,46 +715,59 @@ export function useGameSession({
       })
       .eq('id', session.id);
 
-    if (!error) {
-      setCurrentIndex(newIndex);
-      setIAmReady(false);
-      setPartnerReady(false);
-      setMyAnswer(null);
-      setPartnerAnswer(null);
-    }
   }, [session, currentIndex]);
 
   // Set ready state
   const setReady = useCallback(async (ready: boolean) => {
-    if (!session) return;
+    if (!session || !user) return;
+    
+    // 1. Optimistic Update (Local)
+    setIAmReady(ready);
+
+    // 2. Optimistic Update (Broadcast)
+    if (channelRef.current) {
+        channelRef.current.send({
+            type: 'broadcast',
+            event: 'ready',
+            payload: { userId: user.id, isReady: ready }
+        });
+    }
     
     const updateField = isUser1 ? 'user_1_ready' : 'user_2_ready';
     
-    const { error } = await supabase
+    // 3. Persistence (DB)
+    await supabase
       .from('game_sessions')
       .update({ [updateField]: ready })
       .eq('id', session.id);
 
-    if (!error) {
-      setIAmReady(ready);
-    }
-  }, [session, isUser1]);
+  }, [session, isUser1, user]);
 
   // Submit answer
   const submitAnswer = useCallback(async (answer: string) => {
-    if (!session) return;
+    if (!session || !user) return;
+    
+    // 1. Optimistic Update (Local)
+    setMyAnswer(answer);
+
+    // 2. Optimistic Update (Broadcast)
+    if (channelRef.current) {
+        channelRef.current.send({
+            type: 'broadcast',
+            event: 'answer',
+            payload: { userId: user.id, answer: answer }
+        });
+    }
     
     const updateField = isUser1 ? 'user_1_response' : 'user_2_response';
     
-    const { error } = await supabase
+    // 3. Persistence (DB)
+    await supabase
       .from('game_sessions')
       .update({ [updateField]: answer })
       .eq('id', session.id);
 
-    if (!error) {
-      setMyAnswer(answer);
-    }
-  }, [session, isUser1]);
+  }, [session, isUser1, user]);
 
   // Refresh prompts - explicitly regenerate
   const refreshPrompts = useCallback(async () => {
@@ -750,6 +858,9 @@ export function useGameSession({
     spinComplete,
     isSpinning,
     isUser1,
+    // Tutorial
+    hasSeenTutorial,
+    markTutorialSeen,
     // Actions
     startGame,
     updateSessionConfig,

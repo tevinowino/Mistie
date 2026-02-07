@@ -165,7 +165,7 @@ export const bondService = {
       // We still want to notify the partner that the dew was revealed
       const { data: bond } = await supabase
         .from('bonds')
-        .select('user_1_id, user_2_id')
+        .select('user_1_id, user_2_id, streak_count')
         .eq('id', updatedDew.bond_id)
         .single();
       
@@ -178,6 +178,12 @@ export const bondService = {
             const myName = myProfile?.display_name || 'Your partner';
               // Notify partner
             await notificationService.notifyDewRevealed(partnerId, myName);
+
+            // MILESTONE CHECK: Notify both if hitting a streak milestone
+            const milestones = [3, 5, 10, 20, 50, 100, 200, 365];
+            if (bond.streak_count && milestones.includes(bond.streak_count)) {
+              await notificationService.notifyStreakMilestone([myId, partnerId], bond.streak_count);
+            }
         }
       }
         

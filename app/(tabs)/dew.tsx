@@ -9,7 +9,7 @@ import { darkColors, lightColors, lightColors as staticColors } from '@/src/them
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { Check, ChevronRight, Clock, Droplets, Send, WifiOff } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 export default function DailyDew() {
@@ -25,6 +25,9 @@ export default function DailyDew() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pastDews, setPastDews] = useState<any[]>([]);
   const [partnerName, setPartnerName] = useState('Partner');
+  const [showMilestone, setShowMilestone] = useState(false);
+  const [milestoneStreak, setMilestoneStreak] = useState(0);
+  const previousStreakRef = useRef<number | null>(null);
   // Derived state
   const isUser1 = bond?.user_1_id === user?.id;
   const myResponse = isUser1 ? dew?.user_1_response : dew?.user_2_response;
@@ -69,6 +72,41 @@ export default function DailyDew() {
     };
   }, [bond?.id, isConnected]);
 
+  // Milestone Detection: When dew is revealed, check if streak hit a milestone
+  useEffect(() => {
+    if (!dew?.is_revealed || !bond?.id) return;
+
+    const checkMilestone = async () => {
+      // Refetch bond to get latest streak count
+      const { data: updatedBond } = await supabase
+        .from('bonds')
+        .select('streak_count')
+        .eq('id', bond.id)
+        .single();
+
+      if (updatedBond) {
+        const newStreak = updatedBond.streak_count || 0;
+        const milestones = [3, 5, 10, 20, 50, 100, 200, 365];
+
+        // Only show if this is a new milestone (streak changed from previous)
+        if (
+          milestones.includes(newStreak) &&
+          previousStreakRef.current !== null &&
+          previousStreakRef.current < newStreak
+        ) {
+          setMilestoneStreak(newStreak);
+          setShowMilestone(true);
+        }
+
+        previousStreakRef.current = newStreak;
+        // Also update local bond state
+        setBond((prev: any) => ({ ...prev, streak_count: newStreak }));
+      }
+    };
+
+    checkMilestone();
+  }, [dew?.is_revealed]);
+
   const loadData = async () => {
     if (!user) return;
     setIsLoading(true);
@@ -76,6 +114,11 @@ export default function DailyDew() {
     // 1. Get Bond
     const { data: bondData } = await bondService.getUserBond(user.id);
     setBond(bondData);
+    
+    // Initialize previousStreakRef on initial load
+    if (bondData && previousStreakRef.current === null) {
+      previousStreakRef.current = bondData.streak_count || 0;
+    }
 
     if (bondData) {
       // 2. Get Today's Dew
@@ -351,15 +394,15 @@ export default function DailyDew() {
                       <View>
                         <Text style={[styles.avatarLabel, { color: colors.primary }]}>YOU</Text>
                         <Text style={[styles.responseText, { color: colors.text, fontSize: 14 }]}>
-                          {item.user_1_response || "No answer"}
+                          {isUser1 ? (item.user_1_response || "No answer") : (item.user_2_response || "No answer")}
                         </Text>
                       </View>
                       
                       {/* Partner Answer */}
                       <View>
-                        <Text style={[styles.avatarLabel, { color: colors.secondary }]}>PARTNER</Text>
+                        <Text style={[styles.avatarLabel, { color: colors.secondary }]}>{partnerName.toUpperCase()}</Text>
                         <Text style={[styles.responseText, { color: colors.text, fontSize: 14 }]}>
-                          {item.user_2_response || "No answer"}
+                          {isUser1 ? (item.user_2_response || "No answer") : (item.user_1_response || "No answer")}
                         </Text>
                       </View>
                     </View>
@@ -372,6 +415,13 @@ export default function DailyDew() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Streak Milestone Celebration Modal */}
+      <StreakMilestoneModal
+        visible={showMilestone}
+        streakCount={milestoneStreak}
+        onClose={() => setShowMilestone(false)}
+      />
     </ScreenWrapper>
   );
 }

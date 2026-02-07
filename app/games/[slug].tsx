@@ -1,26 +1,32 @@
 import { BottleSpinner } from '@/src/components/games/BottleSpinner';
 import { ChoiceCard } from '@/src/components/games/ChoiceCard';
+import { BurnEngine } from '@/src/components/games/engines/BurnEngine';
+import { DeepImmersionEngine } from '@/src/components/games/engines/DeepImmersionEngine';
+import { PolaroidEngine } from '@/src/components/games/engines/PolaroidEngine';
+import { SpectrumEngine } from '@/src/components/games/engines/SpectrumEngine';
+import { SplitDecisionEngine } from '@/src/components/games/engines/SplitDecisionEngine';
+import { SwipeDeckEngine } from '@/src/components/games/engines/SwipeDeckEngine';
 import { FlashCard } from '@/src/components/games/FlashCard';
+import { GameLoadingScreen } from '@/src/components/games/GameLoadingScreen';
 import { GameSetup } from '@/src/components/games/GameSetup';
 import { HeatControl } from '@/src/components/games/HeatControl';
 import { InputCard } from '@/src/components/games/InputCard';
 import { ScreenWrapper } from '@/src/components/ui/ScreenWrapper';
 import { useAuth } from '@/src/context/AuthContext';
+import { useGameEngine } from '@/src/hooks/useGameEngine';
 import { useGameSession } from '@/src/hooks/useGameSession';
 import { bondService } from '@/src/services/bondService';
 import { colors } from '@/src/theme/colors';
 import { getGameBackgroundImage } from '@/src/utils/gameImages';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle, RefreshCw, RotateCcw, Wifi, WifiOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -346,10 +352,14 @@ export default function GamePlay() {
     isSpinning,
     isUser1,
     initiateSpin,
+    hasSeenTutorial,
+    markTutorialSeen,
   } = useGameSession({
     bondId: bondId || '',
     gameTypeSlug: slug || '',
   });
+
+  const { engineType } = useGameEngine(slug as string);
 
 
 
@@ -360,36 +370,12 @@ export default function GamePlay() {
   // Initial loading or bond error
   if (initLoading) {
     return (
-      <ScreenWrapper variant="dusk">
-        <View style={styles.loadingContainer}>
-          <View style={styles.cardStack}>
-            {[2, 1, 0].map((index) => (
-              <Animated.View
-                key={index}
-                style={[
-                  styles.loadingCard,
-                  {
-                    transform: [
-                      { translateY: index * -6 },
-                      { scale: 1 - index * 0.03 },
-                    ],
-                    opacity: 1 - index * 0.2,
-                    zIndex: 3 - index,
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={gameMeta?.gradientColors || ['#7C4DFF', '#651FFF']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.loadingCardGradient}
-                />
-              </Animated.View>
-            ))}
-          </View>
-          <Text style={styles.loadingTitle}>Loading...</Text>
-        </View>
-      </ScreenWrapper>
+      <GameLoadingScreen 
+        title="Connecting..." 
+        subtitle="Finding your bond" 
+        colors={gameMeta?.gradientColors}
+        gameSlug={slug as string}
+      />
     );
   }
 
@@ -420,69 +406,12 @@ export default function GamePlay() {
   // Loading state
   if (isLoading || isGenerating) {
     return (
-      <ScreenWrapper variant="dusk">
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-            <ArrowLeft color={colors.text} size={24} />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{gameMeta?.title || 'Game'}</Text>
-          </View>
-          <View style={{ width: 44 }} />
-        </View>
-
-        <View style={styles.loadingContainer}>
-          {/* Animated card stack */}
-          <View style={styles.cardStack}>
-            {[2, 1, 0].map((index) => (
-              <Animated.View
-                key={index}
-                style={[
-                  styles.loadingCard,
-                  {
-                    transform: [
-                      { translateY: index * -6 },
-                      { scale: 1 - index * 0.03 },
-                    ],
-                    opacity: 1 - index * 0.2,
-                    zIndex: 3 - index,
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={gameMeta?.gradientColors || ['#7C4DFF', '#651FFF']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.loadingCardGradient}
-                >
-                  {index === 0 && (
-                    <View style={styles.loadingCardContent}>
-                      <View style={styles.loadingDotsContainer}>
-                        <View style={[styles.loadingDot, styles.loadingDot1]} />
-                        <View style={[styles.loadingDot, styles.loadingDot2]} />
-                        <View style={[styles.loadingDot, styles.loadingDot3]} />
-                      </View>
-                    </View>
-                  )}
-                </LinearGradient>
-              </Animated.View>
-            ))}
-          </View>
-
-          {/* Loading text */}
-          <View style={styles.loadingTextContainer}>
-            <Text style={styles.loadingTitle}>
-              {isGenerating ? '✨ Creating Magic' : 'Loading Game'}
-            </Text>
-            <Text style={styles.loadingSubtitle}>
-              {isGenerating 
-                ? 'Generating unique prompts just for you...' 
-                : 'Preparing your game experience...'}
-            </Text>
-          </View>
-        </View>
-      </ScreenWrapper>
+      <GameLoadingScreen 
+        title={isGenerating ? "Creating Magic" : "Loading Game"} 
+        subtitle={isGenerating ? "Generating unique prompts just for you..." : "Preparing your game experience..."} 
+        colors={gameMeta?.gradientColors}
+        gameSlug={slug as string}
+      />
     );
   }
 
@@ -627,7 +556,100 @@ export default function GamePlay() {
 
       {/* Card - use ChoiceCard for whos-more-likely, FlashCard for others */}
       <View style={styles.cardArea}>
-        {slug === 'mirror' ? (
+        {engineType === 'split' ? (
+          <SplitDecisionEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+            backgroundImage={getGameBackgroundImage(slug as string)}
+          />
+        ) : engineType === 'swipe' ? (
+          <SwipeDeckEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+            gameSlug={slug as string}
+          />
+        ) : engineType === 'immersion' ? (
+          <DeepImmersionEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+            backgroundImage={getGameBackgroundImage(slug as string)}
+          />
+        ) : engineType === 'spectrum' ? (
+          <SpectrumEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+          />
+        ) : engineType === 'polaroid' ? (
+          <PolaroidEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+          />
+        ) : engineType === 'burn' ? (
+          <BurnEngine
+            session={session}
+            prompts={effectivePrompts}
+            currentIndex={currentIndex}
+            onNext={goToNext}
+            onPrevious={goToPrevious}
+            submitAnswer={submitAnswer}
+            myAnswer={myAnswer}
+            partnerAnswer={partnerAnswer}
+            isUser1={isUser1}
+            hasSeenTutorial={hasSeenTutorial}
+            markTutorialSeen={markTutorialSeen}
+            bondId={bondId || ''}
+          />
+        ) : slug === 'mirror' ? (
           <InputCard
             key={currentPrompt.id}
             prompt={currentPrompt.prompt_text}
@@ -656,14 +678,15 @@ export default function GamePlay() {
             onNext={goToNext}
             onPrevious={goToPrevious}
             canGoBack={currentIndex > 0}
-            myName={slug === 'whos-more-likely' ? myName : 'Okay'}
-            partnerName={slug === 'whos-more-likely' ? partnerName : 'Not Okay'}
+            myName={myName}
+            partnerName={partnerName}
             questionLabel={slug === 'whos-more-likely' ? "Who's more likely to..." : "Is it okay if..."}
             agreeOnMatch={slug === 'is-it-okay'}
             myChoice={myAnswer as 'me' | 'partner' | null}
             partnerChoice={partnerAnswer as 'me' | 'partner' | null}
             onSelect={(choice) => submitAnswer(choice)}
             onClose={handleClose}
+            mode={slug as 'whos-more-likely' | 'is-it-okay'}
           />
         ) : slug === 'hard-dare' ? (
           <View style={{ flex: 1 }}>

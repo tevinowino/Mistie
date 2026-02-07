@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
 import { ThemeProvider } from '../src/context/ThemeContext';
@@ -42,7 +43,8 @@ function RootLayoutNav() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#E0F2F1' }}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: '#E0F2F1' }}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -55,7 +57,8 @@ function RootLayoutNav() {
         <Stack.Screen name="profile/index" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="index" options={{ headerShown: false }} />
       </Stack>
-    </View>
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
